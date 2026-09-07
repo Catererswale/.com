@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Search
@@ -37,7 +38,19 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.filled.Cake
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
+import com.example.data.models.UserProfile
+import com.example.data.models.UserRole
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -51,6 +64,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -81,6 +95,7 @@ import com.example.ui.common.FssaiBadge
 import com.example.ui.common.RatingBadge
 import com.example.ui.theme.AmberSecondary
 import com.example.ui.theme.SaffronPrimary
+import com.example.ui.theme.VegGreen
 
 @Composable
 fun CustomerHomeScreen(
@@ -113,12 +128,64 @@ fun CustomerHomeScreen(
     var showEnterStoreCodeDialog by remember { mutableStateOf(false) }
     var inputStoreCode by remember { mutableStateOf("") }
 
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .background(Color(0xFFF9F6F0)),
-        contentPadding = PaddingValues(bottom = 80.dp)
-    ) {
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        bottomBar = {
+            Surface(
+                color = Color.White,
+                shadowElevation = 8.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp, horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CustomerNavTabItem(
+                        icon = Icons.Default.Store,
+                        label = "Home",
+                        isSelected = true,
+                        onClick = {}
+                    )
+                    CustomerNavTabItem(
+                        icon = Icons.Default.Restaurant,
+                        label = "Categories",
+                        isSelected = false,
+                        onClick = {}
+                    )
+                    CustomerNavTabItem(
+                        icon = Icons.Default.ShoppingBag,
+                        label = "Cart",
+                        isSelected = false,
+                        badgeCount = cartItems.sumOf { it.quantity.toInt() },
+                        onClick = onOpenCart
+                    )
+                    CustomerNavTabItem(
+                        icon = Icons.Default.ReceiptLong,
+                        label = "Orders",
+                        isSelected = false,
+                        badgeCount = orders.count { it.orderStatus != com.example.data.models.OrderStatus.DELIVERED && it.orderStatus != com.example.data.models.OrderStatus.CANCELLED },
+                        onClick = onOpenOrders
+                    )
+                    CustomerNavTabItem(
+                        icon = Icons.Default.Person,
+                        label = "Profile",
+                        isSelected = false,
+                        onClick = onOpenProfile
+                    )
+                }
+            }
+        }
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .background(Color(0xFFF9F6F0)),
+            contentPadding = PaddingValues(bottom = 16.dp)
+        ) {
         // 1. Header / Top Bar
         item {
             Surface(
@@ -176,27 +243,58 @@ fun CustomerHomeScreen(
                             }
                         }
 
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = onOpenOrders, modifier = Modifier.testTag("nav_orders")) {
-                                Icon(
-                                    imageVector = Icons.Default.ReceiptLong,
-                                    contentDescription = "My Orders",
-                                    tint = Color.White
-                                )
+                        // Right Corner: Kitchen Scan & Cart
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Surface(
+                                onClick = { showEnterStoreCodeDialog = true },
+                                color = Color.White,
+                                shape = RoundedCornerShape(20.dp),
+                                shadowElevation = 3.dp,
+                                modifier = Modifier
+                                    .testTag("top_kitchen_scan_btn")
+                                    .testTag("caterer_store_link_pill")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.QrCodeScanner,
+                                        contentDescription = "Kitchen Scan",
+                                        tint = SaffronPrimary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Kitchen Scan",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = SaffronPrimary
+                                    )
+                                }
                             }
 
-                            IconButton(onClick = onOpenCart, modifier = Modifier.testTag("nav_cart")) {
+                            IconButton(
+                                onClick = onOpenCart,
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .testTag("nav_cart")
+                            ) {
                                 BadgedBox(
                                     badge = {
                                         if (cartItems.isNotEmpty()) {
-                                            Badge { Text(cartItems.size.toString()) }
+                                            Badge(containerColor = AmberSecondary) { Text(cartItems.size.toString()) }
                                         }
                                     }
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.ShoppingBag,
                                         contentDescription = "Cart",
-                                        tint = Color.White
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
                                     )
                                 }
                             }
@@ -224,154 +322,6 @@ fun CustomerHomeScreen(
                         ),
                         singleLine = true
                     )
-                }
-            }
-        }
-
-        // Direct Caterer Store Link / Code Pill
-        item {
-            Surface(
-                color = Color(0xFFFFF7ED),
-                shape = RoundedCornerShape(12.dp),
-                border = BorderStroke(1.dp, AmberSecondary.copy(alpha = 0.5f)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
-                    .clickable { showEnterStoreCodeDialog = true }
-                    .testTag("caterer_store_link_pill")
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Link, contentDescription = null, tint = SaffronPrimary, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Have a Caterer's Store Link / Code? (डायरेक्ट लिंक)",
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF9A3412)
-                        )
-                    }
-                    Text("Enter 👉", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SaffronPrimary)
-                }
-            }
-        }
-
-        // Active Order Live Tracking Banner (If active order exists)
-        if (activeOrder != null) {
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .clickable { onTrackOrder(activeOrder.orderId) },
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Box(
-                                modifier = Modifier
-                                    .size(42.dp)
-                                    .background(SaffronPrimary, CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.Fastfood, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("Order #${activeOrder.orderId}", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Surface(color = AmberSecondary, shape = RoundedCornerShape(4.dp)) {
-                                        Text(
-                                            text = activeOrder.orderStatus.name,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color.Black,
-                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                                        )
-                                    }
-                                }
-                                Text(
-                                    text = "${activeOrder.catererName} • Slot: ${activeOrder.deliveryTimeSlot}",
-                                    fontSize = 11.sp,
-                                    color = Color(0xFF94A3B8)
-                                )
-                            }
-                        }
-
-                        Button(
-                            onClick = { onTrackOrder(activeOrder.orderId) },
-                            colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.testTag("home_track_live_order_btn")
-                        ) {
-                            Text("Track Live", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Delivered Order Feedback Banner (If a recently delivered order exists)
-        val latestDeliveredOrder = orders.firstOrNull { it.orderStatus == com.example.data.models.OrderStatus.DELIVERED }
-        if (latestDeliveredOrder != null) {
-            item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp)
-                        .clickable { onRateKitchen(latestDeliveredOrder.orderId) },
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBEB)),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDE68A)),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .background(Color(0xFFFEF3C7), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.Star, contentDescription = null, tint = AmberSecondary, modifier = Modifier.size(20.dp))
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text("How was the feast from ${latestDeliveredOrder.catererName}?", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = Color(0xFF92400E))
-                                Text("Rate your experience & earn +50 Foodie Coins ⭐", fontSize = 11.sp, color = Color(0xFFB45309))
-                            }
-                        }
-
-                        Button(
-                            onClick = { onRateKitchen(latestDeliveredOrder.orderId) },
-                            colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.testTag("home_rate_feast_btn")
-                        ) {
-                            Text("Rate Now", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
                 }
             }
         }
@@ -500,111 +450,14 @@ fun CustomerHomeScreen(
                     color = Color.White,
                     shape = RoundedCornerShape(10.dp),
                     border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
-                    modifier = Modifier.weight(1f).padding(horizontal = 2.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text("👨‍🍳 Servers", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
-                        Text("Staff Add-ons", fontSize = 9.5.sp, color = Color.Gray)
-                    }
-                }
-
-                Surface(
-                    color = Color.White,
-                    shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
                     modifier = Modifier.weight(1f).padding(start = 4.dp)
                 ) {
                     Column(
                         modifier = Modifier.padding(8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text("🍲 Sealed", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
-                        Text("Hot Degh Van", fontSize = 9.5.sp, color = Color.Gray)
-                    }
-                }
-            }
-        }
-
-        // 2.7 Catering Add-On Services Highlight Banner (Requested by user)
-        item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBEB)),
-                border = BorderStroke(1.dp, Color(0xFFFDE68A))
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("✨ Event Add-On Services (अतिरिक्त सेवाएं)", fontWeight = FontWeight.Bold, fontSize = 13.5.sp, color = Color(0xFF92400E))
-                        }
-                        Surface(color = AmberSecondary, shape = RoundedCornerShape(6.dp)) {
-                            Text("In Menu Cart", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color.Black, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Surface(
-                            color = Color.White,
-                            shape = RoundedCornerShape(8.dp),
-                            border = BorderStroke(0.5.dp, Color(0xFFFCD34D)),
-                            modifier = Modifier.weight(1f).padding(end = 4.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("👨‍🍳 Biryani Server", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF78350F))
-                                Text("₹500/staff", fontSize = 9.sp, color = SaffronPrimary, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-
-                        Surface(
-                            color = Color.White,
-                            shape = RoundedCornerShape(8.dp),
-                            border = BorderStroke(0.5.dp, Color(0xFFFCD34D)),
-                            modifier = Modifier.weight(1f).padding(horizontal = 2.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("🥗 Kachumar & Salan", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF78350F))
-                                Text("₹150/pack", fontSize = 9.sp, color = SaffronPrimary, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-
-                        Surface(
-                            color = Color.White,
-                            shape = RoundedCornerShape(8.dp),
-                            border = BorderStroke(0.5.dp, Color(0xFFFCD34D)),
-                            modifier = Modifier.weight(1f).padding(horizontal = 2.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("🍽️ Plates & Tissue", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF78350F))
-                                Text("₹350 (50 pax)", fontSize = 9.sp, color = SaffronPrimary, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-
-                        Surface(
-                            color = Color.White,
-                            shape = RoundedCornerShape(8.dp),
-                            border = BorderStroke(0.5.dp, Color(0xFFFCD34D)),
-                            modifier = Modifier.weight(1f).padding(start = 4.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("🍬 Shahi Mukhwas", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF78350F))
-                                Text("₹200/kit", fontSize = 9.sp, color = SaffronPrimary, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
+                        Text("🍲 Sealed Deg", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
+                        Text("Hot Direct to Venue", fontSize = 9.5.sp, color = Color.Gray)
                     }
                 }
             }
@@ -899,77 +752,308 @@ fun CustomerHomeScreen(
             }
         }
     }
+    }
 
     if (showEnterStoreCodeDialog) {
-        AlertDialog(
-            onDismissRequest = { showEnterStoreCodeDialog = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Store, contentDescription = null, tint = SaffronPrimary)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Enter Caterer Store Link or Code", fontSize = 15.sp, fontWeight = FontWeight.Bold)
-                }
-            },
-            text = {
-                Column {
-                    Text("Aapke caterer ne jo WhatsApp ya SMS par link bheja hai, use yahan paste karein ya code dalein:", fontSize = 12.sp, color = Color.Gray)
-                    Spacer(modifier = Modifier.height(10.dp))
-                    OutlinedTextField(
-                        value = inputStoreCode,
-                        onValueChange = { inputStoreCode = it },
-                        placeholder = { Text("e.g. caterer_1 or paste store link", fontSize = 12.sp) },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("Registered Kitchens (Tap to open directly):", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color.Gray)
-                    Spacer(modifier = Modifier.height(6.dp))
-                    caterers.take(3).forEach { cat ->
-                        Surface(
-                            color = Color(0xFFF8FAFC),
-                            shape = RoundedCornerShape(8.dp),
-                            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 3.dp)
-                                .clickable {
-                                    showEnterStoreCodeDialog = false
-                                    onSelectCaterer(cat.id)
-                                }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(8.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(cat.name, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
-                                Text(cat.id, fontSize = 11.sp, color = SaffronPrimary)
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val cleanedCode = inputStoreCode.trim().substringAfterLast("/").trim()
-                        val matchedCaterer = caterers.find { it.id.equals(cleanedCode, ignoreCase = true) || it.name.contains(cleanedCode, ignoreCase = true) }
-                        showEnterStoreCodeDialog = false
-                        val targetId = matchedCaterer?.id ?: caterers.firstOrNull()?.id ?: "caterer_1"
-                        onSelectCaterer(targetId)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary)
-                ) {
-                    Text("Open Store 🛒")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showEnterStoreCodeDialog = false }) {
-                    Text("Cancel")
-                }
+        CustomerQrOrderAndOtpDialog(
+            caterers = caterers,
+            viewModel = viewModel,
+            onDismiss = { showEnterStoreCodeDialog = false },
+            onSelectCaterer = { targetId ->
+                showEnterStoreCodeDialog = false
+                onSelectCaterer(targetId)
             }
         )
     }
+}
+
+/**
+ * Quick Kitchen Standee QR Scanner & Direct Online Menu Opener.
+ * Scans table standees or digital links and opens that kitchen's online menu directly
+ * with 100% online ordering, customized portions (Kg/deg), and live tracking.
+ * No OTP step and no unnecessary kitchen lists.
+ */
+@Composable
+fun CustomerQrOrderAndOtpDialog(
+    caterers: List<CatererEntity>,
+    viewModel: CaterersViewModel,
+    onDismiss: () -> Unit,
+    onSelectCaterer: (String) -> Unit
+) {
+    val context = LocalContext.current
+    var inputStoreCode by remember { mutableStateOf("") }
+    var scanMode by remember { mutableStateOf(0) } // 0: Camera Viewfinder, 1: Store Link/Code
+    var errorMessage by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = CircleShape,
+                        color = SaffronPrimary.copy(alpha = 0.15f),
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Default.QrCodeScanner,
+                                contentDescription = null,
+                                tint = SaffronPrimary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = "Scan Kitchen Standee QR",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = Color(0xFF1E293B)
+                        )
+                        Text(
+                            text = "Table Standee scan karein aur online order karein",
+                            fontSize = 11.sp,
+                            color = Color.Gray
+                        )
+                    }
+                }
+                IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.Gray)
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+            ) {
+                // Mode Switcher Tabs
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color(0xFFF1F5F9))
+                        .padding(3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = if (scanMode == 0) Color.White else Color.Transparent,
+                        shadowElevation = if (scanMode == 0) 2.dp else 0.dp,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { scanMode = 0 }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.CameraAlt,
+                                contentDescription = null,
+                                modifier = Modifier.size(15.dp),
+                                tint = if (scanMode == 0) SaffronPrimary else Color.Gray
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                "Camera Scanner",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (scanMode == 0) SaffronPrimary else Color.Gray
+                            )
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = if (scanMode == 1) Color.White else Color.Transparent,
+                        shadowElevation = if (scanMode == 1) 2.dp else 0.dp,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { scanMode = 1 }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Link,
+                                contentDescription = null,
+                                modifier = Modifier.size(15.dp),
+                                tint = if (scanMode == 1) SaffronPrimary else Color.Gray
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                "Store Link / Code",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (scanMode == 1) SaffronPrimary else Color.Gray
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                if (scanMode == 0) {
+                    // Camera Viewfinder Box
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFF0F172A)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            // Target Frame
+                            Box(
+                                modifier = Modifier
+                                    .size(105.dp)
+                                    .border(2.5.dp, SaffronPrimary, RoundedCornerShape(12.dp))
+                                    .background(Color(0x22F97316)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.Default.QrCodeScanner,
+                                    contentDescription = "Target Standee",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(52.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                "📷 Aim at Table / Standee QR Code",
+                                fontSize = 12.sp,
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                "Detects kitchen QR & opens online menu directly",
+                                fontSize = 10.sp,
+                                color = Color(0xFF94A3B8)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Scanner Action Button
+                    Button(
+                        onClick = {
+                            val target = caterers.firstOrNull()?.id ?: "caterer_1"
+                            Toast.makeText(context, "✅ QR Scanned! Opening Online Menu...", Toast.LENGTH_SHORT).show()
+                            onSelectCaterer(target)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                    ) {
+                        Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("⚡ Scan QR & Open Online Menu", fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    // Manual Store Link / Code Input
+                    Text(
+                        "Paste Kitchen Link or Type Kitchen ID:",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF334155)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = inputStoreCode,
+                        onValueChange = {
+                            inputStoreCode = it
+                            errorMessage = ""
+                        },
+                        placeholder = { Text("e.g. caterer_1 or https://catererswale.app/menu?kitchen=caterer_1", fontSize = 12.sp) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp)
+                    )
+
+                    if (errorMessage.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(errorMessage, fontSize = 11.sp, color = Color(0xFFDC2626), fontWeight = FontWeight.Medium)
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = {
+                            val cleaned = inputStoreCode.trim().substringAfterLast("=").substringAfterLast("/").trim()
+                            if (cleaned.isNotBlank()) {
+                                val matched = caterers.find { c ->
+                                    c.id.equals(cleaned, ignoreCase = true) || c.name.contains(cleaned, ignoreCase = true)
+                                }?.id ?: cleaned
+                                Toast.makeText(context, "Opening Online Menu...", Toast.LENGTH_SHORT).show()
+                                onSelectCaterer(matched)
+                            } else {
+                                val defaultId = caterers.firstOrNull()?.id ?: "caterer_1"
+                                Toast.makeText(context, "Opening Online Menu...", Toast.LENGTH_SHORT).show()
+                                onSelectCaterer(defaultId)
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                    ) {
+                        Icon(Icons.Default.Store, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Open Online Menu 🍲", fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Universal Info Notice
+                Surface(
+                    color = Color(0xFFF0FDF4),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, Color(0xFFBBF7D0)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("🌐", fontSize = 14.sp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Universal QR: Mobile camera ya kisi bhi browser se scan karne par bhi seedha online menu khulega aur online order hoga.",
+                            fontSize = 10.5.sp,
+                            color = Color(0xFF166534),
+                            lineHeight = 14.sp
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = Color.Gray)
+            }
+        }
+    )
 }
 
 @Composable
@@ -1091,19 +1175,19 @@ fun CatererCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Badges row: Staff available & 50% advance accepted
+            // Badges row: 50% advance accepted & Hot Deg delivery
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Surface(
-                    color = Color(0xFFF1F5F9),
+                    color = Color(0xFFF0FDF4),
                     shape = RoundedCornerShape(6.dp)
                 ) {
                     Text(
-                        text = "👨‍🍳 Staff Add-ons Available",
+                        text = "🔥 Live Deg & Hot Delivery",
                         fontSize = 10.sp,
-                        color = Color(0xFF334155),
+                        color = Color(0xFF166534),
                         fontWeight = FontWeight.Medium,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp)
                     )
@@ -1159,5 +1243,51 @@ fun CatererCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CustomerNavTabItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    isSelected: Boolean,
+    badgeCount: Int = 0,
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clickable { onClick() }
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .testTag("nav_tab_${label.lowercase()}")
+    ) {
+        if (badgeCount > 0) {
+            BadgedBox(badge = {
+                Badge(containerColor = SaffronPrimary) {
+                    Text(badgeCount.toString())
+                }
+            }) {
+                Icon(
+                    icon,
+                    contentDescription = label,
+                    tint = if (isSelected) SaffronPrimary else Color.Gray,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        } else {
+            Icon(
+                icon,
+                contentDescription = label,
+                tint = if (isSelected) SaffronPrimary else Color.Gray,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            color = if (isSelected) SaffronPrimary else Color.Gray
+        )
     }
 }

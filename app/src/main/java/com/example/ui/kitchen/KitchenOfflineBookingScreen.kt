@@ -12,6 +12,8 @@ import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,7 +40,10 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Percent
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Print
@@ -57,9 +62,12 @@ import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -80,9 +88,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.data.models.CateringAddOn
 import com.example.data.models.FoodType
 import com.example.data.models.OrderEntity
 import com.example.data.models.OrderStatus
@@ -122,12 +133,19 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
 
     // Settings & Available Slots
     val settings by viewModel.kitchenSettings.collectAsState()
+    val availableAddonServices by viewModel.customAddonServices.collectAsState()
 
     // --- STEP 1 STATE: Menu, Category & POS Cart ---
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("All") }
     var selectedDietFilter by remember { mutableStateOf("ALL") } // ALL, VEG, NON_VEG
     val offlineCart = remember { mutableStateMapOf<String, Double>() } // ItemId -> Quantity
+
+    // Add-On Services Selection State
+    val selectedAddOns = remember { mutableStateMapOf<String, Double>() } // addOnId -> quantity
+    val customAddonItems = remember { mutableStateListOf<Pair<String, Double>>() } // custom name -> price
+    var customAddonNameInput by remember { mutableStateOf("") }
+    var customAddonPriceInput by remember { mutableStateOf("") }
 
     // Custom Item Input
     var customItemName by remember { mutableStateOf("") }
@@ -167,7 +185,14 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
     var isMetalDegGiven by remember { mutableStateOf(true) }
     var cookingNotes by remember { mutableStateOf("") }
 
+    // Discount State
+    var isDiscountEnabled by remember { mutableStateOf(false) }
+    var discountType by remember { mutableStateOf("FLAT") } // "FLAT" (₹) or "PERCENT" (%)
+    var discountInputValue by remember { mutableStateOf("") }
+    var discountReason by remember { mutableStateOf("") }
+
     var advancePaidInput by remember { mutableStateOf("") }
+    var isCashOnDelivery by remember { mutableStateOf(false) }
     var selectedPaymentMethod by remember { mutableStateOf(PaymentMethod.CASH_ON_DELIVERY) }
 
     // --- STEP 3 STATE: Generated Invoice ---
@@ -206,12 +231,37 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
         (item?.pricePerUnit ?: 0.0) * qty
     }
     val customItemsTotal = customCartItems.sumOf { it.second }
-    val totalCartAmount = menuItemsTotal + customItemsTotal
-    val totalCartItemsCount = offlineCart.size + customCartItems.size
+    val addOnsTotal = selectedAddOns.entries.sumOf { (addOnId, qty) ->
+        val addOn = availableAddonServices.find { it.id == addOnId }
+        (addOn?.price ?: 0.0) * qty
+    } + customAddonItems.sumOf { it.second }
 
-    val auto30PercentAdvance = totalCartAmount * 0.30
-    val actualAdvancePaid = advancePaidInput.toDoubleOrNull() ?: auto30PercentAdvance
-    val remainingBalance = (totalCartAmount - actualAdvancePaid).coerceAtLeast(0.0)
+    val totalCartAmount = menuItemsTotal + customItemsTotal + addOnsTotal
+    val totalCartItemsCount = offlineCart.size + customCartItems.size + selectedAddOns.size + customAddonItems.size
+
+    val calculatedDiscount = remember(isDiscountEnabled, discountType, discountInputValue, totalCartAmount) {
+        if (!isDiscountEnabled) 0.0
+        else {
+            val inputNum = discountInputValue.toDoubleOrNull() ?: 0.0
+            val raw = if (discountType == "PERCENT") {
+                totalCartAmount * (inputNum / 100.0)
+            } else {
+                inputNum
+            }
+            raw.coerceIn(0.0, totalCartAmount)
+        }
+    }
+
+    val finalNetBillAmount = (totalCartAmount - calculatedDiscount).coerceAtLeast(0.0)
+    val auto30PercentAdvance = finalNetBillAmount * 0.30
+    val actualAdvancePaid = if (advancePaidInput.isNotBlank()) {
+        (advancePaidInput.toDoubleOrNull() ?: 0.0).coerceIn(0.0, finalNetBillAmount)
+    } else if (isCashOnDelivery) {
+        0.0
+    } else {
+        auto30PercentAdvance
+    }
+    val remainingBalance = (finalNetBillAmount - actualAdvancePaid).coerceAtLeast(0.0)
 
     val categories = listOf(
         "All" to "सभी",
@@ -220,7 +270,7 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
         "Tandoori & Starters" to "स्टार्टर व कबाब",
         "Breads & Roti" to "रोटी व नान",
         "Desserts & Sweets" to "मिठाई व खीर",
-        "Bartan & Deg Rental" to "देग व बर्तन"
+        "Catering Add-ons" to "कैटरिंग सर्विस व सेटअप"
     )
 
     val filteredMenuItems = remember(selectedCategory, selectedDietFilter, searchQuery, menuItems) {
@@ -257,7 +307,7 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                 ) {
                     Column {
                         Text(
-                            text = "POS Offline Booking (ऑफ़लाइन बुकिंग)",
+                            text = "Offline Booking (ऑफ़लाइन बुकिंग)",
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp,
                             color = Color(0xFF1E293B)
@@ -282,7 +332,7 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                     } else {
                         Surface(color = Color(0xFFE8F5E9), shape = RoundedCornerShape(12.dp)) {
                             Text(
-                                "POS Active 🟢",
+                                "Booking Active 🟢",
                                 color = VegGreen,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
@@ -300,19 +350,18 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     // Step 1 Chip
-                    Box(
+                    Surface(
+                        onClick = { currentStep = 1 },
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (currentStep == 1) SaffronPrimary else if (currentStep > 1) Color(0xFFE2E8F0) else Color(0xFFF1F5F9),
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (currentStep == 1) SaffronPrimary else if (currentStep > 1) Color(0xFFE2E8F0) else Color(0xFFF1F5F9))
-                            .clickable { if (currentStep != 1) currentStep = 1 }
-                            .padding(vertical = 8.dp, horizontal = 4.dp),
-                        contentAlignment = Alignment.Center
+                            .height(44.dp)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp)) {
                             Text(
                                 text = if (currentStep > 1) "1. Menu ✅" else "1. Menu (मेनू)",
-                                fontSize = 11.sp,
+                                fontSize = 11.5.sp,
                                 fontWeight = if (currentStep == 1) FontWeight.Bold else FontWeight.Medium,
                                 color = if (currentStep == 1) Color.White else Color(0xFF334155)
                             )
@@ -320,44 +369,47 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                     }
 
                     // Step 2 Chip
-                    Box(
+                    Surface(
+                        onClick = {
+                            if (totalCartItemsCount > 0) currentStep = 2
+                            else Toast.makeText(context, "Please add items from menu first", Toast.LENGTH_SHORT).show()
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (currentStep == 2) SaffronPrimary else if (currentStep > 2) Color(0xFFE2E8F0) else Color(0xFFF1F5F9),
                         modifier = Modifier
                             .weight(1.3f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (currentStep == 2) SaffronPrimary else if (currentStep > 2) Color(0xFFE2E8F0) else Color(0xFFF1F5F9))
-                            .clickable {
-                                if (totalCartItemsCount > 0) currentStep = 2
-                                else Toast.makeText(context, "Please add items from menu first", Toast.LENGTH_SHORT).show()
-                            }
-                            .padding(vertical = 8.dp, horizontal = 4.dp),
-                        contentAlignment = Alignment.Center
+                            .height(44.dp)
                     ) {
-                        Text(
-                            text = if (currentStep > 2) "2. Details ✅" else "2. Details (ग्राहक/एडवांस)",
-                            fontSize = 11.sp,
-                            fontWeight = if (currentStep == 2) FontWeight.Bold else FontWeight.Medium,
-                            color = if (currentStep == 2) Color.White else Color(0xFF334155)
-                        )
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp)) {
+                            Text(
+                                text = if (currentStep > 2) "2. Details ✅" else "2. Details (ग्राहक/एडवांस)",
+                                fontSize = 11.5.sp,
+                                fontWeight = if (currentStep == 2) FontWeight.Bold else FontWeight.Medium,
+                                color = if (currentStep == 2) Color.White else Color(0xFF334155)
+                            )
+                        }
                     }
 
                     // Step 3 Chip
-                    Box(
+                    Surface(
+                        onClick = {
+                            if (generatedInvoiceOrder != null) currentStep = 3
+                            else Toast.makeText(context, "Generate bill first in Step 2", Toast.LENGTH_SHORT).show()
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (currentStep == 3) VegGreen else Color(0xFFF1F5F9),
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (currentStep == 3) VegGreen else Color(0xFFF1F5F9))
-                            .clickable {
-                                if (generatedInvoiceOrder != null) currentStep = 3
-                            }
-                            .padding(vertical = 8.dp, horizontal = 4.dp),
-                        contentAlignment = Alignment.Center
+                            .height(44.dp)
                     ) {
-                        Text(
-                            text = "3. Receipt (रसीद)",
-                            fontSize = 11.sp,
-                            fontWeight = if (currentStep == 3) FontWeight.Bold else FontWeight.Medium,
-                            color = if (currentStep == 3) Color.White else Color(0xFF64748B)
-                        )
+                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp)) {
+                            Text(
+                                text = "3. Receipt (रसीद)",
+                                fontSize = 11.5.sp,
+                                fontWeight = if (currentStep == 3) FontWeight.Bold else FontWeight.Medium,
+                                color = if (currentStep == 3) Color.White else Color(0xFF64748B)
+                            )
+                        }
                     }
                 }
             }
@@ -407,31 +459,74 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
 
                                 Spacer(modifier = Modifier.height(8.dp))
 
-                                // Diet Filter Buttons (All / Veg / Non-Veg)
+                                // Diet Filter Buttons (All / Veg / Non-Veg / Add-ons)
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     listOf(
                                         Triple("ALL", "All Dishes (सभी)", Color(0xFF1E293B)),
                                         Triple("VEG", "Pure Veg 🟢", VegGreen),
-                                        Triple("NON_VEG", "Non-Veg 🔴", Color(0xFFD32F2F))
+                                        Triple("NON_VEG", "Non-Veg 🔴", Color(0xFFD32F2F)),
+                                        Triple("ADD_ONS", "Add-ons ✨", Color(0xFFB45309))
                                     ).forEach { (code, label, color) ->
-                                        val isSelected = selectedDietFilter == code
+                                        val isSelected = if (code == "ADD_ONS") {
+                                            selectedDietFilter == "ADD_ONS" || selectedCategory == "Catering Add-ons"
+                                        } else {
+                                            selectedDietFilter == code && selectedCategory != "Catering Add-ons"
+                                        }
                                         Box(
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(20.dp))
-                                                .background(if (isSelected) color.copy(alpha = 0.15f) else Color(0xFFF1F5F9))
-                                                .border(1.dp, if (isSelected) color else Color.Transparent, RoundedCornerShape(20.dp))
-                                                .clickable { selectedDietFilter = code }
+                                                .background(
+                                                    if (isSelected) {
+                                                        if (code == "ADD_ONS") Color(0xFFFEF3C7) else color.copy(alpha = 0.15f)
+                                                    } else Color(0xFFF1F5F9)
+                                                )
+                                                .border(
+                                                    width = if (isSelected) 1.5.dp else 1.dp,
+                                                    color = if (isSelected) color else Color.Transparent,
+                                                    shape = RoundedCornerShape(20.dp)
+                                                )
+                                                .clickable {
+                                                    if (code == "ADD_ONS") {
+                                                        selectedDietFilter = "ADD_ONS"
+                                                        selectedCategory = "Catering Add-ons"
+                                                    } else {
+                                                        selectedDietFilter = code
+                                                        if (selectedCategory == "Catering Add-ons") {
+                                                            selectedCategory = "All"
+                                                        }
+                                                    }
+                                                }
                                                 .padding(horizontal = 10.dp, vertical = 5.dp)
                                         ) {
-                                            Text(
-                                                text = label,
-                                                fontSize = 11.sp,
-                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                color = if (isSelected) color else Color(0xFF475569)
-                                            )
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    text = label,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                    color = if (isSelected) color else Color(0xFF475569)
+                                                )
+                                                if (code == "ADD_ONS" && (selectedAddOns.isNotEmpty() || customAddonItems.isNotEmpty())) {
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Surface(
+                                                        color = Color(0xFFB45309),
+                                                        shape = CircleShape
+                                                    ) {
+                                                        Text(
+                                                            text = "${selectedAddOns.size + customAddonItems.size}",
+                                                            color = Color.White,
+                                                            fontSize = 9.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -450,7 +545,14 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(14.dp))
                                                 .background(if (isSelected) SaffronPrimary else Color(0xFFF1F5F9))
-                                                .clickable { selectedCategory = catKey }
+                                                .clickable {
+                                                    selectedCategory = catKey
+                                                    if (catKey == "Catering Add-ons") {
+                                                        selectedDietFilter = "ADD_ONS"
+                                                    } else if (selectedDietFilter == "ADD_ONS") {
+                                                        selectedDietFilter = "ALL"
+                                                    }
+                                                }
                                                 .padding(horizontal = 12.dp, vertical = 6.dp)
                                         ) {
                                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -480,30 +582,228 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                 .fillMaxWidth()
                                 .padding(horizontal = 14.dp, vertical = 8.dp)
                         ) {
-                            item {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "${filteredMenuItems.size} Dishes in ${if (selectedCategory == "All") "Entire Menu" else selectedCategory}",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF64748B)
-                                    )
-                                    if (totalCartItemsCount > 0) {
-                                        TextButton(onClick = {
-                                            offlineCart.clear()
-                                            customCartItems.clear()
-                                        }) {
-                                            Text("Clear Cart 🗑️", fontSize = 11.sp, color = Color(0xFFD32F2F))
+                            if (selectedCategory == "Catering Add-ons" || selectedDietFilter == "ADD_ONS") {
+                                item {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "${availableAddonServices.size} Add-On Services (स्टाफ व सेटअप)",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF64748B)
+                                        )
+                                        if (totalCartItemsCount > 0) {
+                                            TextButton(onClick = {
+                                                offlineCart.clear()
+                                                customCartItems.clear()
+                                                selectedAddOns.clear()
+                                                customAddonItems.clear()
+                                            }) {
+                                                Text("Clear Cart 🗑️", fontSize = 11.sp, color = Color(0xFFD32F2F))
+                                            }
+                                        }
+                                    }
+
+                                    Surface(
+                                        color = Color(0xFFFFFBEB),
+                                        shape = RoundedCornerShape(12.dp),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFED7AA)),
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text("✨", fontSize = 22.sp)
+                                            Spacer(modifier = Modifier.width(10.dp))
+                                            Column {
+                                                Text(
+                                                    "Catering Add-On Services (अतिरिक्त सेवाएं)",
+                                                    fontSize = 13.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFF92400E)
+                                                )
+                                                Text(
+                                                    "Biryani servers, disposable plates, extra raita/salan & shahi mukhwas",
+                                                    fontSize = 11.sp,
+                                                    color = Color(0xFFB45309)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                }
+
+                                items(availableAddonServices) { addOn ->
+                                    val currentQty = selectedAddOns[addOn.id] ?: 0.0
+                                    val isAdded = currentQty > 0
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 4.dp)
+                                            .border(
+                                                width = if (isAdded) 1.5.dp else 0.5.dp,
+                                                color = if (isAdded) VegGreen else Color(0xFFE2E8F0),
+                                                shape = RoundedCornerShape(12.dp)
+                                            ),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (isAdded) Color(0xFFF0FDF4) else Color.White
+                                        ),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Column(modifier = Modifier.padding(12.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.Top
+                                            ) {
+                                                Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.Top) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(44.dp)
+                                                            .clip(CircleShape)
+                                                            .background(Color(0xFFFFF7ED)),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Text(addOn.icon, fontSize = 22.sp)
+                                                    }
+                                                    Spacer(modifier = Modifier.width(10.dp))
+                                                    Column {
+                                                        Text(
+                                                            text = addOn.name,
+                                                            fontWeight = FontWeight.Bold,
+                                                            fontSize = 14.sp,
+                                                            color = Color(0xFF1E293B)
+                                                        )
+                                                        Text(
+                                                            text = addOn.hindiName,
+                                                            fontSize = 11.sp,
+                                                            color = Color(0xFFB45309),
+                                                            fontWeight = FontWeight.Medium
+                                                        )
+                                                        Spacer(modifier = Modifier.height(3.dp))
+                                                        Row(
+                                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Text(
+                                                                text = "₹${addOn.price.toInt()} / ${addOn.unit}",
+                                                                fontWeight = FontWeight.ExtraBold,
+                                                                fontSize = 13.sp,
+                                                                color = VegGreen
+                                                            )
+                                                            Surface(
+                                                                color = Color(0xFFF1F5F9),
+                                                                shape = RoundedCornerShape(4.dp)
+                                                            ) {
+                                                                Text(
+                                                                    text = "• ${addOn.servesText}",
+                                                                    fontSize = 10.sp,
+                                                                    color = Color(0xFF475569),
+                                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                                )
+                                                            }
+                                                        }
+                                                        if (addOn.description.isNotBlank()) {
+                                                            Spacer(modifier = Modifier.height(3.dp))
+                                                            Text(
+                                                                text = addOn.description,
+                                                                fontSize = 11.sp,
+                                                                color = Color.Gray,
+                                                                maxLines = 2
+                                                            )
+                                                        }
+                                                    }
+                                                }
+
+                                                if (isAdded) {
+                                                    Surface(
+                                                        color = VegGreen,
+                                                        shape = RoundedCornerShape(16.dp),
+                                                        modifier = Modifier.height(34.dp)
+                                                    ) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            modifier = Modifier.padding(horizontal = 4.dp)
+                                                        ) {
+                                                            IconButton(
+                                                                onClick = {
+                                                                    if (currentQty <= 1.0) {
+                                                                        selectedAddOns.remove(addOn.id)
+                                                                    } else {
+                                                                        selectedAddOns[addOn.id] = currentQty - 1.0
+                                                                    }
+                                                                },
+                                                                modifier = Modifier.size(26.dp)
+                                                            ) {
+                                                                Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = Color.White, modifier = Modifier.size(14.dp))
+                                                            }
+                                                            Text(
+                                                                text = "${currentQty.toInt()}",
+                                                                color = Color.White,
+                                                                fontWeight = FontWeight.Bold,
+                                                                fontSize = 13.sp,
+                                                                modifier = Modifier.padding(horizontal = 6.dp)
+                                                            )
+                                                            IconButton(
+                                                                onClick = {
+                                                                    selectedAddOns[addOn.id] = currentQty + 1.0
+                                                                },
+                                                                modifier = Modifier.size(26.dp)
+                                                            ) {
+                                                                Icon(Icons.Default.Add, contentDescription = "Increase", tint = Color.White, modifier = Modifier.size(14.dp))
+                                                            }
+                                                        }
+                                                    }
+                                                } else {
+                                                    Button(
+                                                        onClick = {
+                                                            selectedAddOns[addOn.id] = 1.0
+                                                            Toast.makeText(context, "Added ${addOn.name}", Toast.LENGTH_SHORT).show()
+                                                        },
+                                                        colors = ButtonDefaults.buttonColors(containerColor = VegGreen),
+                                                        shape = RoundedCornerShape(16.dp),
+                                                        modifier = Modifier.height(34.dp).testTag("add_addon_offline_${addOn.id}")
+                                                    ) {
+                                                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                        Spacer(modifier = Modifier.width(4.dp))
+                                                        Text("ADD", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
-                            }
+                            } else {
+                                item {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "${filteredMenuItems.size} Dishes in ${if (selectedCategory == "All") "Entire Menu" else selectedCategory}",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF64748B)
+                                        )
+                                        if (totalCartItemsCount > 0) {
+                                            TextButton(onClick = {
+                                                offlineCart.clear()
+                                                customCartItems.clear()
+                                                selectedAddOns.clear()
+                                                customAddonItems.clear()
+                                            }) {
+                                                Text("Clear Cart 🗑️", fontSize = 11.sp, color = Color(0xFFD32F2F))
+                                            }
+                                        }
+                                    }
+                                }
 
-                            items(filteredMenuItems) { item ->
+                                items(filteredMenuItems) { item ->
                                 val currentQty = offlineCart[item.id] ?: 0.0
                                 val isInCart = currentQty > 0
                                 val unitLabel = when (item.unitType) {
@@ -598,8 +898,9 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                                         if (item.minQuantity > 1.0) {
                                                             Spacer(modifier = Modifier.width(6.dp))
                                                             Surface(color = Color(0xFFF1F5F9), shape = RoundedCornerShape(4.dp)) {
+                                                                val minQtyFormatted = if (item.minQuantity % 1.0 == 0.0) "${item.minQuantity.toInt()}" else String.format(java.util.Locale.ENGLISH, "%.1f", item.minQuantity)
                                                                 Text(
-                                                                    text = "Min ${item.minQuantity.toInt()} $unitLabel",
+                                                                    text = "Min $minQtyFormatted $unitLabel",
                                                                     fontSize = 9.sp,
                                                                     color = Color(0xFF475569),
                                                                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
@@ -612,6 +913,9 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
 
                                             // Item Action: Add or Stepper
                                             if (isInCart) {
+                                                val step = if (item.unitType == UnitType.KG || item.unitType == UnitType.LITRE) 0.5 else 1.0
+                                                val formattedQty = if (currentQty % 1.0 == 0.0) "${currentQty.toInt()}" else String.format(java.util.Locale.ENGLISH, "%.1f", currentQty)
+
                                                 Column(horizontalAlignment = Alignment.End) {
                                                     Row(
                                                         verticalAlignment = Alignment.CenterVertically,
@@ -622,8 +926,9 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                                     ) {
                                                         IconButton(
                                                             onClick = {
-                                                                val next = currentQty - (if (item.unitType == UnitType.KG && currentQty >= 5) 5.0 else 1.0)
-                                                                if (next <= 0) offlineCart.remove(item.id)
+                                                                val rawNext = currentQty - step
+                                                                val next = kotlin.math.round(rawNext * 10.0) / 10.0
+                                                                if (next <= 0.0) offlineCart.remove(item.id)
                                                                 else offlineCart[item.id] = next
                                                             },
                                                             modifier = Modifier.size(28.dp)
@@ -632,7 +937,7 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                                         }
 
                                                         Text(
-                                                            text = "${currentQty.toInt()} $unitLabel",
+                                                            text = "$formattedQty $unitLabel",
                                                             fontWeight = FontWeight.Bold,
                                                             fontSize = 12.sp,
                                                             color = Color.White,
@@ -641,7 +946,9 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
 
                                                         IconButton(
                                                             onClick = {
-                                                                offlineCart[item.id] = currentQty + (if (item.unitType == UnitType.KG && currentQty >= 5) 5.0 else 1.0)
+                                                                val rawNext = currentQty + step
+                                                                val next = kotlin.math.round(rawNext * 10.0) / 10.0
+                                                                offlineCart[item.id] = next
                                                             },
                                                             modifier = Modifier.size(28.dp)
                                                         ) {
@@ -660,7 +967,7 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                             } else {
                                                 Button(
                                                     onClick = {
-                                                        offlineCart[item.id] = if (item.minQuantity > 1.0) item.minQuantity else 5.0
+                                                        offlineCart[item.id] = if (item.minQuantity >= 0.5) item.minQuantity else 1.0
                                                     },
                                                     colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
                                                     shape = RoundedCornerShape(16.dp),
@@ -668,33 +975,36 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                                 ) {
                                                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
                                                     Spacer(modifier = Modifier.width(4.dp))
-                                                    Text("ADD", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    Text("ADD (1 $unitLabel)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                                 }
                                             }
                                         }
 
-                                        // Quick bulk deg chips for catering (5kg, 10kg, 25kg, 50kg)
+                                        // Quick bulk deg & weight chips for catering (0.5kg, 1kg, 1.5kg, 2kg, 2.5kg, 3kg, 3.5kg, 5kg, 10kg, 15kg, 25kg, 50kg)
                                         if (isInCart && item.unitType == UnitType.KG) {
                                             Spacer(modifier = Modifier.height(8.dp))
                                             Divider(color = Color(0xFFF1F5F9))
                                             Spacer(modifier = Modifier.height(6.dp))
                                             Row(
-                                                modifier = Modifier.fillMaxWidth(),
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .horizontalScroll(rememberScrollState()),
                                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Text("Bulk Degs:", fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
-                                                listOf(5.0, 10.0, 15.0, 25.0, 50.0).forEach { degQty ->
-                                                    val isDegSelected = currentQty == degQty
+                                                Text("Qty / Degs:", fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+                                                listOf(0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 10.0, 15.0, 25.0, 50.0).forEach { degQty ->
+                                                    val isDegSelected = kotlin.math.abs(currentQty - degQty) < 0.05
+                                                    val label = if (degQty % 1.0 == 0.0) "${degQty.toInt()} Kg" else "$degQty Kg"
                                                     Box(
                                                         modifier = Modifier
                                                             .clip(RoundedCornerShape(10.dp))
                                                             .background(if (isDegSelected) SaffronPrimary else Color(0xFFF1F5F9))
                                                             .clickable { offlineCart[item.id] = degQty }
-                                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                            .padding(horizontal = 7.dp, vertical = 3.dp)
                                                     ) {
                                                         Text(
-                                                            text = "${degQty.toInt()} Kg",
+                                                            text = label,
                                                             fontSize = 10.sp,
                                                             fontWeight = if (isDegSelected) FontWeight.Bold else FontWeight.Normal,
                                                             color = if (isDegSelected) Color.White else Color(0xFF475569)
@@ -704,6 +1014,7 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                             }
                                         }
                                     }
+                                }
                                 }
                             }
 
@@ -723,7 +1034,7 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                             color = Color(0xFF1E293B)
                                         )
                                         Text(
-                                            text = "Add extra charges like Deg Rental, Service Staff, Transport, etc.",
+                                            text = "Add extra catering services like Service Staff, Live Halwai, Transport, etc. (Note: Deg/Bartan bhade par nahi dena hai, containers are kitchen property to be returned).",
                                             fontSize = 11.sp,
                                             color = Color.Gray
                                         )
@@ -737,7 +1048,7 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                             OutlinedTextField(
                                                 value = customItemName,
                                                 onValueChange = { customItemName = it },
-                                                placeholder = { Text("Item / Service (e.g. 4 Deg Rental)", fontSize = 11.sp) },
+                                                placeholder = { Text("Service (e.g. 2 Service Waiters)", fontSize = 11.sp) },
                                                 singleLine = true,
                                                 modifier = Modifier.weight(2f).height(48.dp),
                                                 colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SaffronPrimary)
@@ -898,7 +1209,8 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                                     Icon(Icons.Default.Close, contentDescription = "Remove", tint = Color.Gray, modifier = Modifier.size(14.dp))
                                                 }
                                                 Spacer(modifier = Modifier.width(4.dp))
-                                                Text("${item?.name ?: "Item"} (${qty.toInt()} $unitLabel)", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                                                val formattedQty = if (qty % 1.0 == 0.0) "${qty.toInt()}" else String.format(java.util.Locale.ENGLISH, "%.1f", qty)
+                                                Text("${item?.name ?: "Item"} ($formattedQty $unitLabel)", fontSize = 12.sp, fontWeight = FontWeight.Medium)
                                             }
                                             Text("₹${String.format("%.0f", total)}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                         }
@@ -921,6 +1233,48 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                                 Text("$cName (Custom)", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = SaffronPrimary)
                                             }
                                             Text("₹${String.format("%.0f", cPrice)}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+
+                                    selectedAddOns.forEach { (addOnId, qty) ->
+                                        val addOn = availableAddonServices.find { it.id == addOnId }
+                                        val total = (addOn?.price ?: 0.0) * qty
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                IconButton(
+                                                    onClick = { selectedAddOns.remove(addOnId) },
+                                                    modifier = Modifier.size(20.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Close, contentDescription = "Remove", tint = Color.Gray, modifier = Modifier.size(14.dp))
+                                                }
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("${addOn?.icon ?: "✨"} ${addOn?.name ?: "Add-on"} (${qty.toInt()}x)", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color(0xFFB45309))
+                                            }
+                                            Text("₹${String.format("%.0f", total)}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+
+                                    customAddonItems.forEachIndexed { index, (aName, aPrice) ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                IconButton(
+                                                    onClick = { customAddonItems.removeAt(index) },
+                                                    modifier = Modifier.size(20.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Close, contentDescription = "Remove", tint = Color.Gray, modifier = Modifier.size(14.dp))
+                                                }
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("✨ $aName (Custom Service)", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color(0xFFB45309))
+                                            }
+                                            Text("₹${String.format("%.0f", aPrice)}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }
@@ -1207,8 +1561,8 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Column {
-                                            Text("Metal Handi / Degs Provided (देग वापसी आवश्यक)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
-                                            Text("Track this booking under Bartan Return Tracker", fontSize = 10.sp, color = Color.Gray)
+                                            Text("🍲 Metal Handi / Degs Delivery (देग वापसी आवश्यक)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
+                                            Text("Deg/Bartan bhade par nahi dena hai. Food container return mangana hai (9:30 AM daily notification & delivery boy return task)", fontSize = 10.sp, color = Color(0xFFB45309))
                                         }
                                     }
 
@@ -1223,6 +1577,204 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                         modifier = Modifier.fillMaxWidth(),
                                         colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SaffronPrimary)
                                     )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(14.dp))
+                        }
+
+                        // 3B. Catering Add-On Services (अतिरिक्त कैटरिंग सेवाएं व स्टाफ)
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                elevation = CardDefaults.cardElevation(2.dp),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text("✨", fontSize = 18.sp)
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Column {
+                                                Text(
+                                                    "3B. Add-On Services (अतिरिक्त सेवाएं व स्टाफ)",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 14.sp,
+                                                    color = Color(0xFF1E293B)
+                                                )
+                                                Text(
+                                                    "Serving staff, disposable crockery, extra salan/raita",
+                                                    fontSize = 11.sp,
+                                                    color = Color.Gray
+                                                )
+                                            }
+                                        }
+
+                                        if (selectedAddOns.isNotEmpty() || customAddonItems.isNotEmpty()) {
+                                            Surface(
+                                                color = Color(0xFFFEF3C7),
+                                                shape = RoundedCornerShape(8.dp)
+                                            ) {
+                                                Text(
+                                                    text = "₹${addOnsTotal.toInt()} added",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFFB45309),
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    // List of available add-ons with quick selection toggles/counters
+                                    availableAddonServices.forEach { addOn ->
+                                        val currentQty = selectedAddOns[addOn.id] ?: 0.0
+                                        val isSelected = currentQty > 0
+
+                                        Surface(
+                                            color = if (isSelected) Color(0xFFF0FDF4) else Color(0xFFF8FAFC),
+                                            shape = RoundedCornerShape(10.dp),
+                                            border = androidx.compose.foundation.BorderStroke(
+                                                if (isSelected) 1.5.dp else 1.dp,
+                                                if (isSelected) VegGreen else Color(0xFFE2E8F0)
+                                            ),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 4.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(10.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.weight(1f),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(addOn.icon, fontSize = 22.sp)
+                                                    Spacer(modifier = Modifier.width(10.dp))
+                                                    Column {
+                                                        Text(
+                                                            text = addOn.name,
+                                                            fontWeight = FontWeight.Bold,
+                                                            fontSize = 13.sp,
+                                                            color = Color(0xFF1E293B)
+                                                        )
+                                                        Text(
+                                                            text = "${addOn.hindiName} • ₹${addOn.price.toInt()} / ${addOn.unit} (${addOn.servesText})",
+                                                            fontSize = 11.sp,
+                                                            color = if (isSelected) VegGreen else Color(0xFF64748B),
+                                                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                                        )
+                                                    }
+                                                }
+
+                                                if (isSelected) {
+                                                    Surface(
+                                                        color = VegGreen,
+                                                        shape = RoundedCornerShape(14.dp)
+                                                    ) {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                        ) {
+                                                            IconButton(
+                                                                onClick = {
+                                                                    if (currentQty <= 1.0) selectedAddOns.remove(addOn.id)
+                                                                    else selectedAddOns[addOn.id] = currentQty - 1.0
+                                                                },
+                                                                modifier = Modifier.size(24.dp)
+                                                            ) {
+                                                                Icon(Icons.Default.Remove, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
+                                                            }
+                                                            Text(
+                                                                text = "${currentQty.toInt()}",
+                                                                color = Color.White,
+                                                                fontSize = 12.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                modifier = Modifier.padding(horizontal = 6.dp)
+                                                            )
+                                                            IconButton(
+                                                                onClick = { selectedAddOns[addOn.id] = currentQty + 1.0 },
+                                                                modifier = Modifier.size(24.dp)
+                                                            ) {
+                                                                Icon(Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
+                                                            }
+                                                        }
+                                                    }
+                                                } else {
+                                                    OutlinedButton(
+                                                        onClick = { selectedAddOns[addOn.id] = 1.0 },
+                                                        shape = RoundedCornerShape(10.dp),
+                                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = VegGreen),
+                                                        border = androidx.compose.foundation.BorderStroke(1.dp, VegGreen),
+                                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                                        modifier = Modifier.height(30.dp)
+                                                    ) {
+                                                        Text("+ Add", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Add Custom On-The-Fly Add-On Service
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "+ Custom Catering Service (अन्य विशेष सेवा जोड़ें):",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFF475569)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        OutlinedTextField(
+                                            value = customAddonNameInput,
+                                            onValueChange = { customAddonNameInput = it },
+                                            placeholder = { Text("Service (e.g. VIP Crockery)", fontSize = 11.sp) },
+                                            singleLine = true,
+                                            modifier = Modifier.weight(2f).height(46.dp),
+                                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SaffronPrimary)
+                                        )
+
+                                        OutlinedTextField(
+                                            value = customAddonPriceInput,
+                                            onValueChange = { customAddonPriceInput = it },
+                                            placeholder = { Text("₹ Cost", fontSize = 11.sp) },
+                                            singleLine = true,
+                                            modifier = Modifier.weight(1.1f).height(46.dp),
+                                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SaffronPrimary)
+                                        )
+
+                                        Button(
+                                            onClick = {
+                                                val pr = customAddonPriceInput.toDoubleOrNull() ?: 0.0
+                                                if (customAddonNameInput.isNotBlank() && pr > 0) {
+                                                    customAddonItems.add(Pair(customAddonNameInput.trim(), pr))
+                                                    customAddonNameInput = ""
+                                                    customAddonPriceInput = ""
+                                                    Toast.makeText(context, "Added add-on service", Toast.LENGTH_SHORT).show()
+                                                }
+                                            },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB45309)),
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.height(46.dp)
+                                        ) {
+                                            Text("Add", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
                                 }
                             }
                             Spacer(modifier = Modifier.height(14.dp))
@@ -1244,23 +1796,520 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                     }
                                     Spacer(modifier = Modifier.height(10.dp))
 
-                                    // Total Amount Display
+                                    // Items Subtotal Display with Itemized Breakdown
+                                    Card(
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.fillMaxWidth().padding(10.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text("Items Breakdown (सामान व दर):", fontWeight = FontWeight.Bold, fontSize = 11.5.sp, color = Color(0xFF475569))
+                                                Text("Price / दर", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color(0xFF64748B))
+                                            }
+                                            Divider(modifier = Modifier.padding(vertical = 4.dp), color = Color(0xFFE2E8F0))
+
+                                            var reviewIdx = 1
+                                            offlineCart.forEach { (itemId, qty) ->
+                                                val item = menuItems.find { it.id == itemId }
+                                                val unitLabel = when (item?.unitType) {
+                                                    UnitType.KG -> "Kg"
+                                                    UnitType.PORTION -> "Portion"
+                                                    UnitType.DOZEN -> "Dozen"
+                                                    UnitType.LITRE -> "Litre"
+                                                    null -> "Unit"
+                                                }
+                                                val formattedQty = if (qty % 1.0 == 0.0) "${qty.toInt()}" else String.format(java.util.Locale.ENGLISH, "%.1f", qty)
+                                                val rate = item?.pricePerUnit ?: 0.0
+                                                val itemTot = rate * qty
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        "$reviewIdx. ${item?.name ?: "Item"} ($formattedQty $unitLabel @ ₹${rate.toInt()}/$unitLabel)",
+                                                        fontSize = 11.5.sp,
+                                                        color = Color(0xFF1E293B),
+                                                        modifier = Modifier.weight(1f)
+                                                    )
+                                                    Text(
+                                                        "₹${String.format(java.util.Locale.ENGLISH, "%.2f", itemTot)}",
+                                                        fontSize = 11.5.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color(0xFF0F172A)
+                                                    )
+                                                }
+                                                reviewIdx++
+                                            }
+                                            customCartItems.forEach { (cName, cPrice) ->
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        "$reviewIdx. $cName (Custom Item)",
+                                                        fontSize = 11.5.sp,
+                                                        color = Color(0xFF1E293B),
+                                                        modifier = Modifier.weight(1f)
+                                                    )
+                                                    Text(
+                                                        "₹${String.format(java.util.Locale.ENGLISH, "%.2f", cPrice)}",
+                                                        fontSize = 11.5.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color(0xFF0F172A)
+                                                    )
+                                                }
+                                                reviewIdx++
+                                            }
+                                            selectedAddOns.forEach { (addOnId, qty) ->
+                                                val addOn = availableAddonServices.find { it.id == addOnId }
+                                                if (addOn != null) {
+                                                    val addOnTot = addOn.price * qty
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Text(
+                                                            "$reviewIdx. ${addOn.name} (${qty.toInt()}x @ ₹${addOn.price.toInt()})",
+                                                            fontSize = 11.5.sp,
+                                                            color = Color(0xFF1E293B),
+                                                            modifier = Modifier.weight(1f)
+                                                        )
+                                                        Text(
+                                                            "₹${String.format(java.util.Locale.ENGLISH, "%.2f", addOnTot)}",
+                                                            fontSize = 11.5.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = Color(0xFF0F172A)
+                                                        )
+                                                    }
+                                                    reviewIdx++
+                                                }
+                                            }
+                                            customAddonItems.forEach { (aName, aPrice) ->
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        "$reviewIdx. $aName (Add-on)",
+                                                        fontSize = 11.5.sp,
+                                                        color = Color(0xFF1E293B),
+                                                        modifier = Modifier.weight(1f)
+                                                    )
+                                                    Text(
+                                                        "₹${String.format(java.util.Locale.ENGLISH, "%.2f", aPrice)}",
+                                                        fontSize = 11.5.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color(0xFF0F172A)
+                                                    )
+                                                }
+                                                reviewIdx++
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    // Items Subtotal Display
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text("Total Order Bill (कुल राशि):", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                        Text("₹${String.format("%.2f", totalCartAmount)}", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = SaffronPrimary)
+                                        Text("Food & Dishes Subtotal:", fontSize = 12.5.sp, color = Color(0xFF475569))
+                                        Text("₹${String.format(java.util.Locale.ENGLISH, "%.2f", menuItemsTotal + customItemsTotal)}", fontWeight = FontWeight.SemiBold, fontSize = 13.5.sp, color = Color(0xFF1E293B))
+                                    }
+                                    if (addOnsTotal > 0) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text("Add-On Services (अतिरिक्त सेवाएं) ✨:", fontSize = 12.5.sp, color = Color(0xFFB45309), fontWeight = FontWeight.SemiBold)
+                                            Text("+₹${String.format("%.2f", addOnsTotal)}", fontWeight = FontWeight.Bold, fontSize = 13.5.sp, color = Color(0xFFB45309))
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text("Total Gross Amount (कुल मूल्य):", fontSize = 13.sp, color = Color(0xFF1E293B), fontWeight = FontWeight.Bold)
+                                        Text("₹${String.format("%.2f", totalCartAmount)}", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF1E293B))
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    // --- DISCOUNT SECTION ---
+                                    Card(
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (isDiscountEnabled && calculatedDiscount > 0) Color(0xFFF0FDF4) else Color(0xFFF8FAFC)
+                                        ),
+                                        shape = RoundedCornerShape(10.dp),
+                                        border = androidx.compose.foundation.BorderStroke(
+                                            1.dp,
+                                            if (isDiscountEnabled && calculatedDiscount > 0) Color(0xFF86EFAC) else Color(0xFFE2E8F0)
+                                        ),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.padding(12.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(
+                                                        Icons.Default.LocalOffer,
+                                                        contentDescription = null,
+                                                        tint = if (isDiscountEnabled) VegGreen else Color.Gray,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Column {
+                                                        Text(
+                                                            text = "Apply Discount / छूट दें",
+                                                            fontSize = 13.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = if (isDiscountEnabled) Color(0xFF166534) else Color(0xFF334155)
+                                                        )
+                                                        Text(
+                                                            text = "Flat ₹ or % discount for customer",
+                                                            fontSize = 10.sp,
+                                                            color = Color.Gray
+                                                        )
+                                                    }
+                                                }
+
+                                                Switch(
+                                                    checked = isDiscountEnabled,
+                                                    onCheckedChange = {
+                                                        isDiscountEnabled = it
+                                                        if (!it) {
+                                                            discountInputValue = ""
+                                                            discountReason = ""
+                                                        }
+                                                    },
+                                                    colors = SwitchDefaults.colors(
+                                                        checkedThumbColor = Color.White,
+                                                        checkedTrackColor = VegGreen
+                                                    )
+                                                )
+                                            }
+
+                                            if (isDiscountEnabled) {
+                                                Spacer(modifier = Modifier.height(10.dp))
+
+                                                // Discount Type Switcher: Flat ₹ vs Percentage %
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clip(RoundedCornerShape(8.dp))
+                                                        .background(Color(0xFFE2E8F0))
+                                                        .padding(2.dp),
+                                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                ) {
+                                                    Surface(
+                                                        shape = RoundedCornerShape(6.dp),
+                                                        color = if (discountType == "FLAT") Color.White else Color.Transparent,
+                                                        shadowElevation = if (discountType == "FLAT") 1.dp else 0.dp,
+                                                        modifier = Modifier
+                                                            .weight(1f)
+                                                            .clickable {
+                                                                discountType = "FLAT"
+                                                                discountInputValue = ""
+                                                            }
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier.padding(vertical = 7.dp),
+                                                            horizontalArrangement = Arrangement.Center,
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Text(
+                                                                text = "₹ Flat Rupee (नकद छूट)",
+                                                                fontSize = 11.5.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = if (discountType == "FLAT") VegGreen else Color.Gray
+                                                            )
+                                                        }
+                                                    }
+
+                                                    Surface(
+                                                        shape = RoundedCornerShape(6.dp),
+                                                        color = if (discountType == "PERCENT") Color.White else Color.Transparent,
+                                                        shadowElevation = if (discountType == "PERCENT") 1.dp else 0.dp,
+                                                        modifier = Modifier
+                                                            .weight(1f)
+                                                            .clickable {
+                                                                discountType = "PERCENT"
+                                                                discountInputValue = ""
+                                                            }
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier.padding(vertical = 7.dp),
+                                                            horizontalArrangement = Arrangement.Center,
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Icon(Icons.Default.Percent, contentDescription = null, modifier = Modifier.size(13.dp), tint = if (discountType == "PERCENT") VegGreen else Color.Gray)
+                                                            Spacer(modifier = Modifier.width(4.dp))
+                                                            Text(
+                                                                text = "% Percent (प्रतिशत छूट)",
+                                                                fontSize = 11.5.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = if (discountType == "PERCENT") VegGreen else Color.Gray
+                                                            )
+                                                        }
+                                                    }
+                                                }
+
+                                                Spacer(modifier = Modifier.height(10.dp))
+
+                                                // Discount Input Field
+                                                OutlinedTextField(
+                                                    value = discountInputValue,
+                                                    onValueChange = { input ->
+                                                        if (input.all { it.isDigit() || it == '.' }) {
+                                                            discountInputValue = input
+                                                        }
+                                                    },
+                                                    label = {
+                                                        Text(if (discountType == "FLAT") "Discount Amount / छूट राशि (₹)" else "Discount Percentage / प्रतिशत छूट (%)")
+                                                    },
+                                                    prefix = {
+                                                        Text(
+                                                            if (discountType == "FLAT") "₹ " else "% ",
+                                                            fontWeight = FontWeight.Bold,
+                                                            fontSize = 14.sp,
+                                                            color = VegGreen
+                                                        )
+                                                    },
+                                                    placeholder = {
+                                                        Text(if (discountType == "FLAT") "e.g. 500" else "e.g. 10", fontSize = 12.sp)
+                                                    },
+                                                    singleLine = true,
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    modifier = Modifier.fillMaxWidth().testTag("offline_discount_input"),
+                                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = VegGreen)
+                                                )
+
+                                                Spacer(modifier = Modifier.height(8.dp))
+
+                                                // Quick Presets
+                                                Text("Quick Discount Presets (क्विक छूट):", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color.DarkGray)
+                                                Spacer(modifier = Modifier.height(4.dp))
+
+                                                LazyRow(
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                    modifier = Modifier.fillMaxWidth()
+                                                ) {
+                                                    if (discountType == "FLAT") {
+                                                        val flatPresets = listOf(200, 500, 1000, 1500, 2000)
+                                                        items(flatPresets) { amt ->
+                                                            val isSelected = discountInputValue == amt.toString()
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .clip(RoundedCornerShape(8.dp))
+                                                                    .background(if (isSelected) VegGreen else Color(0xFFDCFCE7))
+                                                                    .clickable { discountInputValue = amt.toString() }
+                                                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                                                            ) {
+                                                                Text("₹$amt Off", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (isSelected) Color.White else Color(0xFF15803D))
+                                                            }
+                                                        }
+                                                    } else {
+                                                        val percentPresets = listOf(5, 10, 15, 20)
+                                                        items(percentPresets) { pct ->
+                                                            val isSelected = discountInputValue == pct.toString()
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .clip(RoundedCornerShape(8.dp))
+                                                                    .background(if (isSelected) VegGreen else Color(0xFFDCFCE7))
+                                                                    .clickable { discountInputValue = pct.toString() }
+                                                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                                                            ) {
+                                                                Text("$pct% Off", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (isSelected) Color.White else Color(0xFF15803D))
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                Spacer(modifier = Modifier.height(8.dp))
+
+                                                // Discount Reason / Notes (Optional)
+                                                OutlinedTextField(
+                                                    value = discountReason,
+                                                    onValueChange = { discountReason = it },
+                                                    label = { Text("Discount Reason / Note (कारण - optional)", fontSize = 11.sp) },
+                                                    placeholder = { Text("e.g. Regular Customer, Bulk Booking Deal, Relative", fontSize = 11.sp) },
+                                                    singleLine = true,
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = VegGreen)
+                                                )
+
+                                                if (calculatedDiscount > 0) {
+                                                    Spacer(modifier = Modifier.height(8.dp))
+                                                    Surface(
+                                                        color = Color(0xFFDCFCE7),
+                                                        shape = RoundedCornerShape(6.dp),
+                                                        modifier = Modifier.fillMaxWidth()
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Text(
+                                                                text = "🎉 Applied: ${if (discountType == "PERCENT") "$discountInputValue% Discount" else "Flat ₹$discountInputValue Off"}",
+                                                                fontSize = 11.5.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = Color(0xFF166534)
+                                                            )
+                                                            Text(
+                                                                text = "-₹${String.format("%.2f", calculatedDiscount)}",
+                                                                fontSize = 12.5.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = Color(0xFF166534)
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    // Discount Applied Row (if any)
+                                    if (calculatedDiscount > 0) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text("Discount Deducted (छूट घटी):", fontSize = 12.5.sp, color = VegGreen, fontWeight = FontWeight.Bold)
+                                            Text("-₹${String.format("%.2f", calculatedDiscount)}", fontSize = 13.sp, color = VegGreen, fontWeight = FontWeight.Bold)
+                                        }
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                    }
+
+                                    // Net Final Order Amount Display
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column {
+                                            Text("Net Final Order Bill (अंतिम कुल बिल):", fontWeight = FontWeight.Bold, fontSize = 13.5.sp, color = Color(0xFF1E293B))
+                                            if (calculatedDiscount > 0) {
+                                                Text("After ₹${calculatedDiscount.toInt()} discount", fontSize = 10.sp, color = VegGreen)
+                                            }
+                                        }
+                                        Text("₹${String.format(java.util.Locale.ENGLISH, "%.2f", finalNetBillAmount)}", fontWeight = FontWeight.Bold, fontSize = 19.sp, color = SaffronPrimary)
                                     }
 
                                     Divider(modifier = Modifier.padding(vertical = 10.dp))
+
+                                    // --- CASH ON DELIVERY (COD) OPTIONAL TOGGLE CARD ---
+                                    Card(
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (isCashOnDelivery) Color(0xFFEFF6FF) else Color(0xFFF8FAFC)
+                                        ),
+                                        border = androidx.compose.foundation.BorderStroke(
+                                            1.dp,
+                                            if (isCashOnDelivery) Color(0xFF2563EB) else Color(0xFFE2E8F0)
+                                        ),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    val newCOD = !isCashOnDelivery
+                                                    isCashOnDelivery = newCOD
+                                                    if (newCOD) {
+                                                        selectedPaymentMethod = PaymentMethod.CASH_ON_DELIVERY
+                                                        if (advancePaidInput.isBlank()) advancePaidInput = "0"
+                                                    }
+                                                }
+                                                .padding(12.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(
+                                                        text = "Cash on Delivery (COD) 🚚",
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 13.sp,
+                                                        color = if (isCashOnDelivery) Color(0xFF1D4ED8) else Color(0xFF1E293B)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Surface(
+                                                        color = if (isCashOnDelivery) Color(0xFFDBEAFE) else Color(0xFFF1F5F9),
+                                                        shape = RoundedCornerShape(4.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = if (isCashOnDelivery) "COD ACTIVE" else "OPTIONAL",
+                                                            fontSize = 9.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = if (isCashOnDelivery) Color(0xFF1D4ED8) else Color(0xFF64748B),
+                                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                                        )
+                                                    }
+                                                }
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = if (isCashOnDelivery)
+                                                        "Advance optional hai (₹0 advance chalega). Baaki/poora bill delivery ke samay Rider/Delivery Boy cash collect karega."
+                                                    else
+                                                        "Customer delivery par payment karega toh ise ON karein (Advance optional).",
+                                                    fontSize = 11.sp,
+                                                    color = Color(0xFF64748B),
+                                                    lineHeight = 15.sp
+                                                )
+                                            }
+                                            Switch(
+                                                checked = isCashOnDelivery,
+                                                onCheckedChange = { checked ->
+                                                    isCashOnDelivery = checked
+                                                    if (checked) {
+                                                        selectedPaymentMethod = PaymentMethod.CASH_ON_DELIVERY
+                                                        if (advancePaidInput.isBlank()) advancePaidInput = "0"
+                                                    }
+                                                },
+                                                colors = SwitchDefaults.colors(
+                                                    checkedThumbColor = Color(0xFF2563EB),
+                                                    checkedTrackColor = Color(0xFF93C5FD)
+                                                )
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
 
                                     // Advance Payment Input
                                     OutlinedTextField(
                                         value = advancePaidInput,
                                         onValueChange = { advancePaidInput = it },
-                                        label = { Text("Advance Received / एडवांस मिला (₹)") },
+                                        label = {
+                                            Text(
+                                                if (isCashOnDelivery) "Advance Received (Optional / वैकल्पिक - ₹0 for COD)"
+                                                else "Advance Received / एडवांस मिला (₹)"
+                                            )
+                                        },
                                         leadingIcon = { Icon(Icons.Default.AttachMoney, contentDescription = null, tint = VegGreen) },
                                         singleLine = true,
                                         modifier = Modifier.fillMaxWidth().testTag("offline_advance_input"),
@@ -1269,36 +2318,63 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
 
                                     Spacer(modifier = Modifier.height(8.dp))
 
-                                    // Quick Advance Presets Chips
+                                    // Quick Advance Presets Chips (Based on finalNetBillAmount)
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
+                                        // ₹0 Full COD Chip
                                         Box(
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(12.dp))
-                                                .background(Color(0xFFE8F5E9))
-                                                .clickable { advancePaidInput = String.format("%.0f", totalCartAmount * 0.30) }
+                                                .background(if (actualAdvancePaid == 0.0) Color(0xFFDBEAFE) else Color(0xFFF1F5F9))
+                                                .clickable {
+                                                    isCashOnDelivery = true
+                                                    selectedPaymentMethod = PaymentMethod.CASH_ON_DELIVERY
+                                                    advancePaidInput = "0"
+                                                }
                                                 .padding(horizontal = 8.dp, vertical = 6.dp)
                                         ) {
-                                            Text("30% (₹${(totalCartAmount * 0.30).toInt()})", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = VegGreen)
+                                            Text(
+                                                "₹0 (Full COD 🚚)",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (actualAdvancePaid == 0.0) Color(0xFF1D4ED8) else Color(0xFF475569)
+                                            )
                                         }
 
                                         Box(
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(12.dp))
                                                 .background(Color(0xFFE8F5E9))
-                                                .clickable { advancePaidInput = String.format("%.0f", totalCartAmount * 0.50) }
+                                                .clickable {
+                                                    advancePaidInput = String.format(java.util.Locale.ENGLISH, "%.0f", finalNetBillAmount * 0.30)
+                                                }
                                                 .padding(horizontal = 8.dp, vertical = 6.dp)
                                         ) {
-                                            Text("50% (₹${(totalCartAmount * 0.50).toInt()})", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = VegGreen)
+                                            Text("30% (₹${(finalNetBillAmount * 0.30).toInt()})", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = VegGreen)
+                                        }
+
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(Color(0xFFE8F5E9))
+                                                .clickable {
+                                                    advancePaidInput = String.format(java.util.Locale.ENGLISH, "%.0f", finalNetBillAmount * 0.50)
+                                                }
+                                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                                        ) {
+                                            Text("50% (₹${(finalNetBillAmount * 0.50).toInt()})", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = VegGreen)
                                         }
 
                                         Box(
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(12.dp))
                                                 .background(VegGreen)
-                                                .clickable { advancePaidInput = String.format("%.0f", totalCartAmount) }
+                                                .clickable {
+                                                    isCashOnDelivery = false
+                                                    advancePaidInput = String.format(java.util.Locale.ENGLISH, "%.0f", finalNetBillAmount)
+                                                }
                                                 .padding(horizontal = 8.dp, vertical = 6.dp)
                                         ) {
                                             Text("100% Full Paid", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
@@ -1308,7 +2384,13 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                     Spacer(modifier = Modifier.height(10.dp))
 
                                     // Payment Method Selector
-                                    Text("Payment Received Via (भुगतान माध्यम):", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.DarkGray)
+                                    Text(
+                                        text = if (isCashOnDelivery && actualAdvancePaid == 0.0) "Payment Mode: Cash on Delivery (COD 🚚)"
+                                        else "Payment / Advance Received Via (भुगतान माध्यम):",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.DarkGray
+                                    )
                                     Spacer(modifier = Modifier.height(6.dp))
 
                                     Row(
@@ -1316,7 +2398,7 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
                                         val modes = listOf(
-                                            Pair(PaymentMethod.CASH_ON_DELIVERY, "Cash 💵"),
+                                            Pair(PaymentMethod.CASH_ON_DELIVERY, "Cash / COD 💵"),
                                             Pair(PaymentMethod.UPI, "UPI 📲"),
                                             Pair(PaymentMethod.CARD, "Card 💳")
                                         )
@@ -1327,7 +2409,12 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                                     .weight(1f)
                                                     .clip(RoundedCornerShape(8.dp))
                                                     .background(if (isSelected) Color(0xFF1E293B) else Color(0xFFF1F5F9))
-                                                    .clickable { selectedPaymentMethod = mode }
+                                                    .clickable {
+                                                        selectedPaymentMethod = mode
+                                                        if (mode == PaymentMethod.CASH_ON_DELIVERY) {
+                                                            isCashOnDelivery = true
+                                                        }
+                                                    }
                                                     .padding(vertical = 8.dp),
                                                 contentAlignment = Alignment.Center
                                             ) {
@@ -1340,7 +2427,11 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
 
                                     // Calculated Remaining Balance Box
                                     Card(
-                                        colors = CardDefaults.cardColors(containerColor = if (remainingBalance > 0) Color(0xFFFFF3E0) else Color(0xFFE8F5E9)),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (remainingBalance <= 0) Color(0xFFE8F5E9)
+                                            else if (isCashOnDelivery) Color(0xFFEFF6FF)
+                                            else Color(0xFFFFF3E0)
+                                        ),
                                         shape = RoundedCornerShape(8.dp),
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
@@ -1350,20 +2441,31 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Column {
-                                                Text("Remaining Balance Due / बकाया राशि:", fontSize = 11.sp, color = Color.Gray)
                                                 Text(
-                                                    text = "₹${String.format("%.2f", remainingBalance)}",
+                                                    text = if (isCashOnDelivery && actualAdvancePaid == 0.0) "Full Amount Due on Delivery (डिलीवरी पर देय):"
+                                                    else "Remaining Balance Due / बकाया राशि:",
+                                                    fontSize = 11.sp,
+                                                    color = Color.Gray
+                                                )
+                                                Text(
+                                                    text = "₹${String.format(java.util.Locale.ENGLISH, "%.2f", remainingBalance)}",
                                                     fontWeight = FontWeight.Bold,
                                                     fontSize = 16.sp,
-                                                    color = if (remainingBalance > 0) Color(0xFFD32F2F) else VegGreen
+                                                    color = if (remainingBalance <= 0) VegGreen
+                                                    else if (isCashOnDelivery) Color(0xFF1D4ED8)
+                                                    else Color(0xFFD32F2F)
                                                 )
                                             }
                                             Surface(
-                                                color = if (remainingBalance <= 0) VegGreen else Color(0xFFE65100),
+                                                color = if (remainingBalance <= 0) VegGreen
+                                                else if (isCashOnDelivery) Color(0xFF2563EB)
+                                                else Color(0xFFE65100),
                                                 shape = RoundedCornerShape(12.dp)
                                             ) {
                                                 Text(
-                                                    text = if (remainingBalance <= 0) "FULL PAID ✅" else "BALANCE DUE ⏳",
+                                                    text = if (remainingBalance <= 0) "FULL PAID ✅"
+                                                    else if (isCashOnDelivery) "COD / ON DELIVERY 🚚"
+                                                    else "BALANCE DUE ⏳",
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     color = Color.White,
@@ -1391,6 +2493,7 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                     }
 
                                     val summaryList = mutableListOf<String>()
+                                    var sNo = 1
                                     offlineCart.forEach { (itemId, qty) ->
                                         val item = menuItems.find { it.id == itemId }
                                         val unitLabel = when (item?.unitType) {
@@ -1400,18 +2503,36 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                             UnitType.LITRE -> "Litre"
                                             null -> "Unit"
                                         }
-                                        summaryList.add("${item?.name ?: "Item"} (${qty.toInt()} $unitLabel)")
+                                        val formattedQty = if (qty % 1.0 == 0.0) "${qty.toInt()}" else String.format(java.util.Locale.ENGLISH, "%.1f", qty)
+                                        val rate = item?.pricePerUnit ?: 0.0
+                                        val itemTotal = rate * qty
+                                        val itemName = item?.name ?: "Item"
+                                        summaryList.add("$sNo. $itemName ($formattedQty $unitLabel @ ₹${rate.toInt()}/$unitLabel) = ₹${String.format(java.util.Locale.ENGLISH, "%.2f", itemTotal)}")
+                                        sNo++
                                     }
-                                    customCartItems.forEach { (cName, _) ->
-                                        summaryList.add(cName)
+                                    customCartItems.forEach { (cName, cPrice) ->
+                                        summaryList.add("$sNo. $cName (Custom Item) = ₹${String.format(java.util.Locale.ENGLISH, "%.2f", cPrice)}")
+                                        sNo++
                                     }
-                                    val finalSummary = if (summaryList.isNotEmpty()) summaryList.joinToString(", ") else "Special Biryani Catering Setup"
+                                    selectedAddOns.forEach { (addOnId, qty) ->
+                                        val addOn = availableAddonServices.find { it.id == addOnId }
+                                        if (addOn != null) {
+                                            val addOnTot = addOn.price * qty
+                                            summaryList.add("$sNo. ${addOn.icon} ${addOn.name} (${qty.toInt()}x @ ₹${addOn.price.toInt()}) = ₹${String.format(java.util.Locale.ENGLISH, "%.2f", addOnTot)}")
+                                            sNo++
+                                        }
+                                    }
+                                    customAddonItems.forEach { (aName, aPrice) ->
+                                        summaryList.add("$sNo. ✨ $aName (Add-on Service) = ₹${String.format(java.util.Locale.ENGLISH, "%.2f", aPrice)}")
+                                        sNo++
+                                    }
+                                    val finalSummary = if (summaryList.isNotEmpty()) summaryList.joinToString("\n") else "1. Special Biryani Catering Setup = ₹0.00"
 
                                     val invId = "INV-2026-${(1000..9999).random()}"
                                     generatedInvoiceId = invId
 
-                                    val finalTotal = if (totalCartAmount > 0) totalCartAmount else 3800.0
-                                    val finalAdvance = if (actualAdvancePaid > 0) actualAdvancePaid else (finalTotal * 0.30)
+                                    val finalTotal = if (finalNetBillAmount > 0) finalNetBillAmount else (totalCartAmount - calculatedDiscount).coerceAtLeast(0.0)
+                                    val finalAdvance = actualAdvancePaid
                                     val finalBal = (finalTotal - finalAdvance).coerceAtLeast(0.0)
 
                                     val orderObj = OrderEntity(
@@ -1426,12 +2547,18 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                         advancePaidAmount = finalAdvance,
                                         balanceAmount = finalBal,
                                         paymentMethod = selectedPaymentMethod,
-                                        paymentStatus = if (finalBal <= 0) PaymentStatus.FULL_PAID else PaymentStatus.ADVANCE_PAID_30,
+                                        paymentStatus = when {
+                                            finalBal <= 0.0 -> PaymentStatus.FULL_PAID
+                                            finalAdvance <= 0.0 -> PaymentStatus.BALANCE_PENDING
+                                            else -> PaymentStatus.ADVANCE_PAID_30
+                                        },
                                         orderStatus = OrderStatus.CONFIRMED,
                                         deliveryDate = eventDate,
                                         deliveryTimeSlot = eventTimeSlot,
+                                        catererOrderDiscountAmount = calculatedDiscount,
                                         isOfflineBooking = true,
-                                        isCashSubmittedToKitchen = true
+                                        cashCollectedByDeliveryBoy = if (selectedPaymentMethod == PaymentMethod.CASH_ON_DELIVERY) finalBal else 0.0,
+                                        isCashSubmittedToKitchen = if (selectedPaymentMethod == PaymentMethod.CASH_ON_DELIVERY && finalAdvance == 0.0) false else true
                                     )
 
                                     viewModel.placeOrder(
@@ -1442,11 +2569,13 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                         catererName = "A1 Huma Caterers",
                                         itemsSummary = finalSummary,
                                         totalAmount = finalTotal,
-                                        is30PercentAdvance = finalBal > 0,
+                                        is30PercentAdvance = finalBal > 0 && finalAdvance > 0,
                                         paymentMethod = selectedPaymentMethod,
                                         deliveryDate = eventDate,
                                         deliveryTimeSlot = eventTimeSlot,
+                                        catererDiscountAmount = calculatedDiscount,
                                         isOfflineBooking = true,
+                                        customAdvanceAmount = finalAdvance,
                                         onSuccess = {}
                                     )
 
@@ -1493,6 +2622,56 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                 .fillMaxSize()
                                 .padding(16.dp)
                         ) {
+                            item {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    OutlinedButton(
+                                        onClick = { currentStep = 2 },
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                        modifier = Modifier.height(40.dp)
+                                    ) {
+                                        Icon(Icons.Default.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("⬅️ Edit Details", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    Button(
+                                        onClick = {
+                                            generatedInvoiceOrder = null
+                                            customerName = ""
+                                            customerMobile = ""
+                                            customerAltMobile = ""
+                                            customerAddress = ""
+                                            cookingNotes = ""
+                                            isDiscountEnabled = false
+                                            discountType = "FLAT"
+                                            discountInputValue = ""
+                                            discountReason = ""
+                                            advancePaidInput = ""
+                                            offlineCart.clear()
+                                            customCartItems.clear()
+                                            selectedAddOns.clear()
+                                            customAddonItems.clear()
+                                            currentStep = 1
+                                            Toast.makeText(context, "✨ Started New Booking (नया बिल)!", Toast.LENGTH_SHORT).show()
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                        modifier = Modifier.height(40.dp)
+                                    ) {
+                                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("New Booking ➕", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
                             item {
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
@@ -1547,20 +2726,96 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
 
                                         Divider(modifier = Modifier.padding(vertical = 12.dp))
 
-                                        Text("ORDER ITEMS SUMMARY (ऑर्डर सामान):", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = SaffronPrimary)
+                                        Text("ORDER ITEMS SUMMARY (ऑर्डर सामान व दर):", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = SaffronPrimary)
                                         Spacer(modifier = Modifier.height(6.dp))
 
+                                        // Itemized Bill Table with Serial Numbers & Product Prices
                                         Card(
-                                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF9F9F9)),
-                                            shape = RoundedCornerShape(8.dp),
+                                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                                            shape = RoundedCornerShape(10.dp),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                                            elevation = CardDefaults.cardElevation(1.dp),
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
-                                            Text(
-                                                text = invOrder.itemsSummary,
-                                                fontSize = 13.sp,
-                                                modifier = Modifier.padding(12.dp),
-                                                lineHeight = 18.sp
-                                            )
+                                            Column(modifier = Modifier.fillMaxWidth()) {
+                                                // Table Header
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .background(Color(0xFFF8FAFC))
+                                                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text("S.No.", fontWeight = FontWeight.Bold, fontSize = 10.5.sp, color = Color(0xFF64748B), modifier = Modifier.width(36.dp))
+                                                    Text("Item Description & Rate", fontWeight = FontWeight.Bold, fontSize = 10.5.sp, color = Color(0xFF64748B), modifier = Modifier.weight(1f))
+                                                    Text("Price / कुल", fontWeight = FontWeight.Bold, fontSize = 10.5.sp, color = Color(0xFF64748B), textAlign = TextAlign.End)
+                                                }
+                                                Divider(color = Color(0xFFE2E8F0), thickness = 1.dp)
+
+                                                val rawSummary = invOrder.itemsSummary
+                                                val rawItems = if (rawSummary.contains("\n")) {
+                                                    rawSummary.split("\n").filter { it.isNotBlank() }
+                                                } else {
+                                                    rawSummary.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                                                }
+
+                                                rawItems.forEachIndexed { index, lineText ->
+                                                    val parts = lineText.split("=")
+                                                    val leftSide = parts[0].trim()
+                                                    val rightSide = if (parts.size > 1) parts[1].trim() else ""
+
+                                                    val sNoMatch = Regex("^(\\d+)\\.\\s*(.*)").find(leftSide)
+                                                    val itemIndex = sNoMatch?.groupValues?.get(1) ?: "${index + 1}"
+                                                    val itemDesc = sNoMatch?.groupValues?.get(2) ?: leftSide
+
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Surface(
+                                                            color = Color(0xFFEFF6FF),
+                                                            shape = RoundedCornerShape(4.dp),
+                                                            modifier = Modifier.size(24.dp)
+                                                        ) {
+                                                            Box(contentAlignment = Alignment.Center) {
+                                                                Text(
+                                                                    text = itemIndex,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    fontSize = 11.sp,
+                                                                    color = Color(0xFF1D4ED8)
+                                                                )
+                                                            }
+                                                        }
+                                                        Spacer(modifier = Modifier.width(8.dp))
+
+                                                        Column(modifier = Modifier.weight(1f)) {
+                                                            Text(
+                                                                text = itemDesc,
+                                                                fontWeight = FontWeight.SemiBold,
+                                                                fontSize = 12.5.sp,
+                                                                color = Color(0xFF1E293B),
+                                                                lineHeight = 16.sp
+                                                            )
+                                                        }
+
+                                                        if (rightSide.isNotBlank()) {
+                                                            Spacer(modifier = Modifier.width(8.dp))
+                                                            Text(
+                                                                text = rightSide,
+                                                                fontWeight = FontWeight.Bold,
+                                                                fontSize = 13.sp,
+                                                                color = Color(0xFF0F172A),
+                                                                textAlign = TextAlign.End
+                                                            )
+                                                        }
+                                                    }
+                                                    if (index < rawItems.size - 1) {
+                                                        Divider(color = Color(0xFFF1F5F9), thickness = 0.8.dp)
+                                                    }
+                                                }
+                                            }
                                         }
 
                                         Divider(modifier = Modifier.padding(vertical = 12.dp))
@@ -1572,33 +2827,96 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
                                             Column(modifier = Modifier.padding(14.dp)) {
+                                                val originalSubtotal = invOrder.totalAmount + invOrder.catererOrderDiscountAmount
+                                                if (invOrder.catererOrderDiscountAmount > 0) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        Text("Items Subtotal (सामान कुल):", fontSize = 12.5.sp, color = Color(0xFF64748B))
+                                                        Text("₹${String.format("%.2f", originalSubtotal)}", fontSize = 13.sp, color = Color(0xFF334155))
+                                                    }
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        Text("Discount Given (छूट) 🏷️:", fontSize = 12.5.sp, color = VegGreen, fontWeight = FontWeight.Bold)
+                                                        Text("-₹${String.format("%.2f", invOrder.catererOrderDiscountAmount)}", fontSize = 13.sp, color = VegGreen, fontWeight = FontWeight.Bold)
+                                                    }
+                                                    Divider(modifier = Modifier.padding(vertical = 6.dp), color = Color(0xFFFFE082))
+                                                }
+
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth(),
                                                     horizontalArrangement = Arrangement.SpaceBetween
                                                 ) {
-                                                    Text("Total Order Bill (कुल राशि):", fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                                                    Text("₹${String.format("%.2f", invOrder.totalAmount)}", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                                    Text("Payment Terms / माध्यम:", fontSize = 12.5.sp, color = Color.Gray)
+                                                    Text(
+                                                        text = if (invOrder.paymentMethod == PaymentMethod.CASH_ON_DELIVERY) "Cash on Delivery (COD 🚚)" else invOrder.paymentMethod.name,
+                                                        fontSize = 12.5.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color(0xFF1E293B)
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Text("Final Net Bill (कुल शुद्ध राशि):", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                                    Text("₹${String.format(java.util.Locale.ENGLISH, "%.2f", invOrder.totalAmount)}", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = SaffronPrimary)
                                                 }
                                                 Spacer(modifier = Modifier.height(6.dp))
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth(),
                                                     horizontalArrangement = Arrangement.SpaceBetween
                                                 ) {
-                                                    Text("Advance Received (एडवांस जमा ✅):", fontSize = 13.sp, color = VegGreen, fontWeight = FontWeight.Bold)
-                                                    Text("₹${String.format("%.2f", invOrder.advancePaidAmount)}", fontSize = 14.sp, color = VegGreen, fontWeight = FontWeight.Bold)
+                                                    Text(
+                                                        if (invOrder.advancePaidAmount == 0.0) "Advance Received (वैकल्पिक):"
+                                                        else "Advance Received (एडवांस जमा ✅):",
+                                                        fontSize = 13.sp,
+                                                        color = if (invOrder.advancePaidAmount == 0.0) Color.Gray else VegGreen,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    Text(
+                                                        if (invOrder.advancePaidAmount == 0.0) "₹0.00 (Pay on Delivery)"
+                                                        else "₹${String.format(java.util.Locale.ENGLISH, "%.2f", invOrder.advancePaidAmount)}",
+                                                        fontSize = 14.sp,
+                                                        color = if (invOrder.advancePaidAmount == 0.0) Color(0xFF1D4ED8) else VegGreen,
+                                                        fontWeight = FontWeight.Bold
+                                                    )
                                                 }
                                                 Divider(modifier = Modifier.padding(vertical = 6.dp), color = Color.LightGray)
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth(),
                                                     horizontalArrangement = Arrangement.SpaceBetween
                                                 ) {
-                                                    Text("Remaining Balance Due (बकाया राशि ⏳):", fontSize = 14.sp, color = Color(0xFFD32F2F), fontWeight = FontWeight.Bold)
-                                                    Text("₹${String.format("%.2f", invOrder.balanceAmount)}", fontSize = 16.sp, color = Color(0xFFD32F2F), fontWeight = FontWeight.Bold)
+                                                    Text(
+                                                        if (invOrder.paymentMethod == PaymentMethod.CASH_ON_DELIVERY && invOrder.advancePaidAmount == 0.0)
+                                                            "Full COD Due at Delivery (डिलीवरी पर देय 🚚):"
+                                                        else
+                                                            "Remaining Balance Due (बकाया राशि ⏳):",
+                                                        fontSize = 13.5.sp,
+                                                        color = if (invOrder.paymentMethod == PaymentMethod.CASH_ON_DELIVERY) Color(0xFF1D4ED8) else Color(0xFFD32F2F),
+                                                        fontWeight = FontWeight.Bold
+                                                    )
+                                                    Text(
+                                                        "₹${String.format(java.util.Locale.ENGLISH, "%.2f", invOrder.balanceAmount)}",
+                                                        fontSize = 16.sp,
+                                                        color = if (invOrder.paymentMethod == PaymentMethod.CASH_ON_DELIVERY) Color(0xFF1D4ED8) else Color(0xFFD32F2F),
+                                                        fontWeight = FontWeight.Bold
+                                                    )
                                                 }
                                             }
                                         }
 
                                         Spacer(modifier = Modifier.height(16.dp))
+
+                                        val originalSubtotalVal = invOrder.totalAmount + invOrder.catererOrderDiscountAmount
+                                        val discountLines = if (invOrder.catererOrderDiscountAmount > 0) {
+                                            "*SUBTOTAL:* ₹${String.format("%.2f", originalSubtotalVal)}\n*SPECIAL DISCOUNT:* -₹${String.format("%.2f", invOrder.catererOrderDiscountAmount)} 🏷️\n"
+                                        } else ""
 
                                         val invoiceText = """
                                             *A1 HUMA CATERERS - BOOKING INVOICE*
@@ -1609,12 +2927,13 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                             *Time Slot:* ${invOrder.deliveryTimeSlot}
                                             *Address:* ${invOrder.deliveryAddress}
                                             ---------------------------------------
-                                            *ITEMS ORDERED:*
-                                            ${invOrder.itemsSummary}
+                                            *ITEMS ORDERED (सामान, दर व कुल):*
+${invOrder.itemsSummary}
                                             ---------------------------------------
-                                            *TOTAL BILL:* ₹${String.format("%.2f", invOrder.totalAmount)}
-                                            *ADVANCE RECEIVED:* ₹${String.format("%.2f", invOrder.advancePaidAmount)} ✅
-                                            *REMAINING BALANCE:* ₹${String.format("%.2f", invOrder.balanceAmount)} ⏳
+                                            ${discountLines}*PAYMENT TERMS:* ${if (invOrder.paymentMethod == PaymentMethod.CASH_ON_DELIVERY) "Cash on Delivery (COD 🚚)" else invOrder.paymentMethod.name}
+                                            *TOTAL BILL:* ₹${String.format(java.util.Locale.ENGLISH, "%.2f", invOrder.totalAmount)}
+                                            *ADVANCE RECEIVED:* ₹${String.format(java.util.Locale.ENGLISH, "%.2f", invOrder.advancePaidAmount)} ${if (invOrder.advancePaidAmount > 0) "✅" else "(COD)"}
+                                            *REMAINING BALANCE:* ₹${String.format(java.util.Locale.ENGLISH, "%.2f", invOrder.balanceAmount)} ${if (invOrder.paymentMethod == PaymentMethod.CASH_ON_DELIVERY && invOrder.balanceAmount > 0) "(Collect on Delivery 🚚)" else "⏳"}
                                             ---------------------------------------
                                             Thank you for booking with A1 Huma Caterers!
                                             FSSAI Lic: 23319008000123
@@ -1623,6 +2942,10 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                         // Action Button: Share on WhatsApp
                                         Button(
                                             onClick = {
+                                                val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                                val clip = android.content.ClipData.newPlainText("Catering Invoice", invoiceText)
+                                                clipboardManager?.setPrimaryClip(clip)
+
                                                 val rawPhone = invOrder.customerMobile
                                                 val cleanPhone = rawPhone.replace(" ", "").replace("-", "").replace("+", "").trim()
                                                 val formattedPhone = if (cleanPhone.startsWith("91")) cleanPhone else if (cleanPhone.length == 10) "91$cleanPhone" else cleanPhone
@@ -1632,16 +2955,22 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                                     val waUri = Uri.parse("https://api.whatsapp.com/send?phone=$formattedPhone&text=$encodedText")
                                                     val waIntent = Intent(Intent.ACTION_VIEW, waUri)
                                                     context.startActivity(waIntent)
+                                                    Toast.makeText(context, "📲 Opening WhatsApp (Bill copied to clipboard)", Toast.LENGTH_SHORT).show()
                                                 } catch (e: Exception) {
-                                                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                                                        type = "text/plain"
-                                                        putExtra(Intent.EXTRA_TEXT, invoiceText)
+                                                    try {
+                                                        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                                            type = "text/plain"
+                                                            putExtra(Intent.EXTRA_TEXT, invoiceText)
+                                                        }
+                                                        context.startActivity(Intent.createChooser(sendIntent, "Share WhatsApp Invoice"))
+                                                    } catch (e2: Exception) {
+                                                        Toast.makeText(context, "📋 Bill copied to clipboard! (व्हाट्सएप पर पेस्ट करें)", Toast.LENGTH_LONG).show()
                                                     }
-                                                    context.startActivity(Intent.createChooser(sendIntent, "Share WhatsApp Invoice"))
                                                 }
                                             },
                                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
-                                            modifier = Modifier.fillMaxWidth().height(46.dp).testTag("share_whatsapp_bill")
+                                            shape = RoundedCornerShape(10.dp),
+                                            modifier = Modifier.fillMaxWidth().height(48.dp).testTag("share_whatsapp_bill")
                                         ) {
                                             Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                                             Spacer(modifier = Modifier.width(8.dp))
@@ -1650,16 +2979,61 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
 
                                         Spacer(modifier = Modifier.height(10.dp))
 
-                                        // Print Receipt Button
+                                        // Action Buttons Row: Copy Bill, Print Slip, New Booking
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
+                                            // Copy Bill
+                                            Button(
+                                                onClick = {
+                                                    val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                                    val clip = android.content.ClipData.newPlainText("Catering Invoice", invoiceText)
+                                                    clipboardManager?.setPrimaryClip(clip)
+                                                    Toast.makeText(context, "📋 Bill copied to clipboard! (बिल कॉपी हो गया)", Toast.LENGTH_LONG).show()
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF475569)),
+                                                shape = RoundedCornerShape(10.dp),
+                                                modifier = Modifier.weight(1f).height(48.dp).testTag("copy_bill_button")
+                                            ) {
+                                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Copy", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            }
+
                                             Button(
                                                 onClick = {
                                                     try {
                                                         val printManager = context.getSystemService(Context.PRINT_SERVICE) as? PrintManager
                                                         val jobName = "A1_Huma_Invoice_${generatedInvoiceId}"
+
+                                                        val htmlDiscountSection = if (invOrder.catererOrderDiscountAmount > 0) {
+                                                            """
+                                                            <div class="row"><span>Items Subtotal:</span> <span>₹${String.format(java.util.Locale.ENGLISH, "%.2f", originalSubtotalVal)}</span></div>
+                                                            <div class="row green"><span>Discount Deducted:</span> <span>-₹${String.format(java.util.Locale.ENGLISH, "%.2f", invOrder.catererOrderDiscountAmount)}</span></div>
+                                                            """.trimIndent()
+                                                        } else ""
+
+                                                        val rawSlipItems = if (invOrder.itemsSummary.contains("\n")) {
+                                                            invOrder.itemsSummary.split("\n").filter { it.isNotBlank() }
+                                                        } else {
+                                                            invOrder.itemsSummary.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                                                        }
+                                                        val htmlItemRows = rawSlipItems.mapIndexed { index, lineText ->
+                                                            val parts = lineText.split("=")
+                                                            val leftSide = parts[0].trim()
+                                                            val rightSide = if (parts.size > 1) parts[1].trim() else ""
+                                                            val sNoMatch = Regex("^(\\d+)\\.\\s*(.*)").find(leftSide)
+                                                            val sNo = sNoMatch?.groupValues?.get(1) ?: "${index + 1}"
+                                                            val desc = sNoMatch?.groupValues?.get(2) ?: leftSide
+                                                            """
+                                                            <tr style="border-bottom: 1px solid #e2e8f0;">
+                                                              <td style="padding: 6px 4px; font-weight: bold; color: #E65100; text-align: center;">$sNo</td>
+                                                              <td style="padding: 6px; color: #1e293b;">$desc</td>
+                                                              <td style="padding: 6px; text-align: right; font-weight: bold; color: #0f172a;">$rightSide</td>
+                                                            </tr>
+                                                            """.trimIndent()
+                                                        }.joinToString("\n")
 
                                                         val htmlContent = """
                                                             <!DOCTYPE html><html><head><meta charset="utf-8"/><style>
@@ -1685,15 +3059,25 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                                             <div style="margin-top: 3px;"><strong>Delivery Address:</strong> ${invOrder.deliveryAddress}</div>
                                                             <div style="margin-top: 3px;"><strong>Time Slot:</strong> ${invOrder.deliveryTimeSlot}</div>
                                                             </div>
-                                                            <h3 style="color: #222; font-size: 14px; margin-bottom: 4px;">Order Items & Services</h3>
-                                                            <div style="background: #ffffff; border: 1px solid #eee; padding: 8px; border-radius: 4px; font-size: 12px;">
-                                                            ${invOrder.itemsSummary}
-                                                            </div>
+                                                            <h3 style="color: #222; font-size: 14px; margin-bottom: 6px;">Order Items & Services (सामान व दर)</h3>
+                                                            <table style="width: 100%; border-collapse: collapse; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; margin-bottom: 12px;">
+                                                              <thead>
+                                                                <tr style="background: #f1f5f9; border-bottom: 2px solid #cbd5e1; text-align: left;">
+                                                                  <th style="padding: 6px 4px; width: 32px; text-align: center;">#</th>
+                                                                  <th style="padding: 6px;">Item Description & Rate</th>
+                                                                  <th style="padding: 6px; text-align: right;">Price (कुल)</th>
+                                                                </tr>
+                                                              </thead>
+                                                              <tbody>
+                                                                $htmlItemRows
+                                                              </tbody>
+                                                            </table>
                                                             <div class="summary">
-                                                            <div class="row"><span>Total Order Amount:</span> <strong>₹${String.format("%.2f", invOrder.totalAmount)}</strong></div>
-                                                            <div class="row green"><span>Advance Received:</span> <span>₹${String.format("%.2f", invOrder.advancePaidAmount)}</span></div>
+                                                            $htmlDiscountSection
+                                                            <div class="row"><span>Total Net Bill:</span> <strong>₹${String.format(java.util.Locale.ENGLISH, "%.2f", invOrder.totalAmount)}</strong></div>
+                                                            <div class="row green"><span>Advance Received:</span> <span>₹${String.format(java.util.Locale.ENGLISH, "%.2f", invOrder.advancePaidAmount)}</span></div>
                                                             <hr style="border: 0; border-top: 1px solid #ddd; margin: 6px 0;"/>
-                                                            <div class="row red"><span>Remaining Balance Due:</span> <span>₹${String.format("%.2f", invOrder.balanceAmount)}</span></div>
+                                                            <div class="row red"><span>Remaining Balance Due:</span> <span>₹${String.format(java.util.Locale.ENGLISH, "%.2f", invOrder.balanceAmount)}</span></div>
                                                             </div>
                                                             <div class="footer">Thank you for booking with A1 Huma Caterers!</div>
                                                             </body></html>
@@ -1714,11 +3098,12 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                                     }
                                                 },
                                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0288D1)),
-                                                modifier = Modifier.weight(1f).height(42.dp)
+                                                shape = RoundedCornerShape(10.dp),
+                                                modifier = Modifier.weight(1f).height(48.dp).testTag("print_slip_button")
                                             ) {
                                                 Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(16.dp))
                                                 Spacer(modifier = Modifier.width(4.dp))
-                                                Text("Print Slip", fontSize = 12.sp)
+                                                Text("Print", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                             }
 
                                             Button(
@@ -1730,17 +3115,25 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                                     customerAltMobile = ""
                                                     customerAddress = ""
                                                     cookingNotes = ""
+                                                    isDiscountEnabled = false
+                                                    discountType = "FLAT"
+                                                    discountInputValue = ""
+                                                    discountReason = ""
                                                     advancePaidInput = ""
                                                     offlineCart.clear()
                                                     customCartItems.clear()
+                                                    selectedAddOns.clear()
+                                                    customAddonItems.clear()
                                                     currentStep = 1
+                                                    Toast.makeText(context, "✨ Started New Booking (नया बिल)!", Toast.LENGTH_SHORT).show()
                                                 },
                                                 colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
-                                                modifier = Modifier.weight(1f).height(42.dp)
+                                                shape = RoundedCornerShape(10.dp),
+                                                modifier = Modifier.weight(1f).height(48.dp).testTag("new_booking_button")
                                             ) {
                                                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                                                 Spacer(modifier = Modifier.width(4.dp))
-                                                Text("New Booking ➕", fontSize = 12.sp)
+                                                Text("New ➕", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                             }
                                         }
                                     }

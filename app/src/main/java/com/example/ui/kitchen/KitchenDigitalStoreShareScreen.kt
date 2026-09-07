@@ -494,6 +494,21 @@ fun KitchenDigitalStoreShareScreen(
                             Text("Share QR 📤", fontSize = 11.5.sp)
                         }
                     }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Button(
+                        onClick = {
+                            onPreviewCustomerStore(kitchen?.id ?: "caterer_1")
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F172A)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.QrCodeScanner, contentDescription = null, tint = AmberSecondary, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Customer QR Scan & OTP Order Flow Test 📱", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
                 }
             }
         }

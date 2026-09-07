@@ -15,17 +15,15 @@ class ExampleUnitTest {
   @Test
   fun testFavoriteKitchenEntityCreation() {
     val favorite = FavoriteKitchenEntity(
-      id = "cust_1_cat_1",
       userId = "cust_1",
       catererId = "cat_1",
       catererName = "Royal Nawabi Caterers",
       kitchenName = "Royal Nawabi Cloud Kitchen",
       rating = 4.8f,
-      cuisineType = "Awadhi & Biryani",
+      address = "Awadhi & Biryani, Delhi",
       favoritedAt = 1700000000L
     )
 
-    assertEquals("cust_1_cat_1", favorite.id)
     assertEquals("cust_1", favorite.userId)
     assertEquals("cat_1", favorite.catererId)
     assertEquals("Royal Nawabi Caterers", favorite.catererName)
@@ -37,7 +35,7 @@ class ExampleUnitTest {
     val profile = UserProfile(
       id = "cust_1",
       name = "Rohan Verma",
-      phone = "+91 98765 11223",
+      mobile = "+91 98765 11223",
       role = UserRole.CUSTOMER,
       favoriteKitchenIds = listOf("cat_1", "cat_2")
     )

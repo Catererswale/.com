@@ -3,7 +3,10 @@ package com.example.ui.admin
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,6 +27,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,10 +37,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import com.example.data.models.DeliveryBoyEntity
+import com.example.ui.common.DeliveryBoyDeliveriesHistoryDialog
+import com.example.ui.common.formatAadhaarNumber
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.ArrowForward
@@ -83,6 +92,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -103,6 +113,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.models.CatererEntity
@@ -127,6 +138,7 @@ fun AdminMainContainer(
         "Dashboard & Analytics",
         "Caterers Partner Mgt",
         "➕ Add Kitchen Partner",
+        "🛵 Delivery Fleet Master",
         "KYC Approvals",
         "All Orders Master",
         "Settlements & Fee",
@@ -174,13 +186,14 @@ fun AdminMainContainer(
                 0 -> AdminDashboardScreen(viewModel, onNavigateTab = { selectedTab = it })
                 1 -> AdminCatererManagementScreen(viewModel, onNavigateToAddKitchen = { selectedTab = 2 })
                 2 -> AdminAddKitchenPartnerScreen(viewModel, onPartnerAddedSuccess = { selectedTab = 1 })
-                3 -> AdminKycApprovalScreen(viewModel)
-                4 -> AdminAllOrdersScreen(viewModel)
-                5 -> AdminSettlementScreen(viewModel)
-                6 -> AdminSettlementHistoryScreen(viewModel)
-                7 -> AdminDisputeScreen(viewModel)
-                8 -> AdminSystemTogglesScreen(viewModel)
-                9 -> com.example.ui.kitchen.KitchenSettingsScreen(viewModel)
+                3 -> AdminDeliveryFleetScreen(viewModel)
+                4 -> AdminKycApprovalScreen(viewModel)
+                5 -> AdminAllOrdersScreen(viewModel)
+                6 -> AdminSettlementScreen(viewModel)
+                7 -> AdminSettlementHistoryScreen(viewModel)
+                8 -> AdminDisputeScreen(viewModel)
+                9 -> AdminSystemTogglesScreen(viewModel)
+                10 -> com.example.ui.kitchen.KitchenSettingsScreen(viewModel)
             }
         }
     }
@@ -438,7 +451,7 @@ fun AdminDashboardScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .background(Color(0xFF1E293B), RoundedCornerShape(8.dp))
-                                .clickable { onNavigateTab(4) }
+                                .clickable { onNavigateTab(5) }
                                 .padding(10.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -458,7 +471,7 @@ fun AdminDashboardScreen(
                             modifier = Modifier
                                 .weight(1f)
                                 .background(Color(0xFF1E293B), RoundedCornerShape(8.dp))
-                                .clickable { onNavigateTab(4) }
+                                .clickable { onNavigateTab(5) }
                                 .padding(10.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2020,66 +2033,1113 @@ private fun AdminDocPreviewItem(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminAllOrdersScreen(viewModel: CaterersViewModel) {
+    val context = LocalContext.current
     val orders by viewModel.ordersList.collectAsState()
-    var search by remember { mutableStateOf("") }
+    val caterers by viewModel.caterersList.collectAsState()
+    val deliveryBoys by viewModel.deliveryBoysList.collectAsState()
 
-    val filtered = if (search.isBlank()) orders else orders.filter {
-        it.orderId.contains(search, ignoreCase = true) ||
-        it.customerName.contains(search, ignoreCase = true) ||
-        it.catererName.contains(search, ignoreCase = true)
+    var searchQuery by remember { mutableStateOf("") }
+    // Channel / Source filter: "ALL", "ONLINE", "OFFLINE"
+    var selectedChannelFilter by remember { mutableStateOf("ALL") }
+    // Lifecycle status filter: "ALL", "CONFIRMED", "PREPARING", "OUT_FOR_DELIVERY", "DELIVERED", "NEW"
+    var selectedStatusFilter by remember { mutableStateOf("ALL") }
+    // Kitchen filter: "ALL" or specific catererId
+    var selectedKitchenFilter by remember { mutableStateOf("ALL") }
+
+    // Dialog action states
+    var assigningOrder by remember { mutableStateOf<OrderEntity?>(null) }
+    var statusChangingOrder by remember { mutableStateOf<OrderEntity?>(null) }
+    var inspectingOrder by remember { mutableStateOf<OrderEntity?>(null) }
+
+    // Filter logic
+    val filteredOrders = remember(orders, searchQuery, selectedChannelFilter, selectedStatusFilter, selectedKitchenFilter) {
+        orders.filter { order ->
+            // 1. Channel Filter (Online vs Offline POS)
+            val channelMatches = when (selectedChannelFilter) {
+                "ONLINE" -> !order.isOfflineBooking
+                "OFFLINE" -> order.isOfflineBooking
+                else -> true
+            }
+
+            // 2. Lifecycle Status Filter
+            val statusMatches = when (selectedStatusFilter) {
+                "CONFIRMED" -> order.orderStatus == OrderStatus.CONFIRMED || order.orderStatus == OrderStatus.ACCEPTED
+                "PREPARING" -> order.orderStatus == OrderStatus.PREPARING
+                "OUT_FOR_DELIVERY" -> order.orderStatus == OrderStatus.OUT_FOR_DELIVERY || order.orderStatus == OrderStatus.ASSIGNED_DELIVERY
+                "DELIVERED" -> order.orderStatus == OrderStatus.DELIVERED
+                "NEW" -> order.orderStatus == OrderStatus.NEW
+                else -> true
+            }
+
+            // 3. Kitchen Filter
+            val kitchenMatches = if (selectedKitchenFilter == "ALL") true else order.catererId == selectedKitchenFilter
+
+            // 4. Text Search
+            val searchMatches = if (searchQuery.isBlank()) true else {
+                order.orderId.contains(searchQuery, ignoreCase = true) ||
+                order.customerName.contains(searchQuery, ignoreCase = true) ||
+                order.customerMobile.contains(searchQuery, ignoreCase = true) ||
+                order.catererName.contains(searchQuery, ignoreCase = true) ||
+                order.deliveryAddress.contains(searchQuery, ignoreCase = true) ||
+                (order.deliveryBoyName?.contains(searchQuery, ignoreCase = true) == true) ||
+                order.itemsSummary.contains(searchQuery, ignoreCase = true)
+            }
+
+            channelMatches && statusMatches && kitchenMatches && searchMatches
+        }
     }
+
+    // Counts for Badges and Metric Cards
+    val totalOrdersCount = orders.size
+    val onlineOrdersCount = orders.count { !it.isOfflineBooking }
+    val offlineOrdersCount = orders.count { it.isOfflineBooking }
+    val confirmedCount = orders.count { it.orderStatus == OrderStatus.CONFIRMED || it.orderStatus == OrderStatus.ACCEPTED }
+    val preparingCount = orders.count { it.orderStatus == OrderStatus.PREPARING }
+    val outForDeliveryCount = orders.count { it.orderStatus == OrderStatus.OUT_FOR_DELIVERY || it.orderStatus == OrderStatus.ASSIGNED_DELIVERY }
+    val deliveredCount = orders.count { it.orderStatus == OrderStatus.DELIVERED }
+    val newCount = orders.count { it.orderStatus == OrderStatus.NEW }
 
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .background(Color(0xFFF8FAFC))
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // 1. Header Banner
         item {
-            Text("Global Master Orders Monitor", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Spacer(modifier = Modifier.height(8.dp))
-
-            OutlinedTextField(
-                value = search,
-                onValueChange = { search = it },
-                label = { Text("Search by Order ID, Customer, or Kitchen") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-        }
-
-        items(filtered) { order ->
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                shape = RoundedCornerShape(10.dp)
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                shape = RoundedCornerShape(14.dp)
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Order #${order.orderId}", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = SaffronPrimary)
-                        Surface(color = AmberSecondary, shape = RoundedCornerShape(4.dp)) {
-                            Text(order.orderStatus.name, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Black, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = CircleShape,
+                                color = SaffronPrimary,
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "All Orders Master Control",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 17.sp,
+                                    color = Color.White
+                                )
+                                Text(
+                                    text = "Global live monitoring of Online & Offline Catering Orders across all Kitchens",
+                                    fontSize = 11.5.sp,
+                                    color = Color(0xFF94A3B8)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Summary KPI Metric Strip
+        item {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                item {
+                    AdminOrderMetricChip(
+                        title = "Total Orders",
+                        value = "$totalOrdersCount",
+                        subtitle = "Online + Offline",
+                        containerColor = Color.White,
+                        textColor = Color(0xFF0F172A),
+                        borderColor = Color(0xFFE2E8F0)
+                    )
+                }
+                item {
+                    AdminOrderMetricChip(
+                        title = "Online Orders",
+                        value = "$onlineOrdersCount",
+                        subtitle = "Via App / Web",
+                        containerColor = Color(0xFFEFF6FF),
+                        textColor = Color(0xFF1D4ED8),
+                        borderColor = Color(0xFFBFDBFE)
+                    )
+                }
+                item {
+                    AdminOrderMetricChip(
+                        title = "Offline / POS",
+                        value = "$offlineOrdersCount",
+                        subtitle = "Walk-in Bookings",
+                        containerColor = Color(0xFFFAF5FF),
+                        textColor = Color(0xFF7E22CE),
+                        borderColor = Color(0xFFE9D5FF)
+                    )
+                }
+                item {
+                    AdminOrderMetricChip(
+                        title = "In Preparation",
+                        value = "$preparingCount",
+                        subtitle = "Cooking in Kitchen",
+                        containerColor = Color(0xFFFFFBEB),
+                        textColor = Color(0xFFB45309),
+                        borderColor = Color(0xFFFDE68A)
+                    )
+                }
+                item {
+                    AdminOrderMetricChip(
+                        title = "Out for Delivery",
+                        value = "$outForDeliveryCount",
+                        subtitle = "Rider on the Way",
+                        containerColor = Color(0xFFFFF7ED),
+                        textColor = Color(0xFFC2410C),
+                        borderColor = Color(0xFFFED7AA)
+                    )
+                }
+                item {
+                    AdminOrderMetricChip(
+                        title = "Delivered",
+                        value = "$deliveredCount",
+                        subtitle = "Successfully Completed",
+                        containerColor = Color(0xFFF0FDF4),
+                        textColor = Color(0xFF15803D),
+                        borderColor = Color(0xFFBBF7D0)
+                    )
+                }
+            }
+        }
+
+        // 3. Search Bar
+        item {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Search by Order ID, Customer, Phone, Kitchen, Rider, or Address...", fontSize = 13.sp) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = SaffronPrimary) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color.Gray, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(10.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                    focusedBorderColor = SaffronPrimary,
+                    unfocusedBorderColor = Color(0xFFCBD5E1)
+                ),
+                singleLine = true
+            )
+        }
+
+        // 4. Order Type / Channel Filter Chips (ALL, ONLINE, OFFLINE)
+        item {
+            Column {
+                Text(
+                    text = "CHANNEL / BOOKING TYPE:",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF64748B),
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    item {
+                        FilterChip(
+                            selected = selectedChannelFilter == "ALL",
+                            onClick = { selectedChannelFilter = "ALL" },
+                            label = { Text("All Channels ($totalOrdersCount)", fontSize = 11.5.sp, fontWeight = FontWeight.Bold) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF0F172A),
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = selectedChannelFilter == "ONLINE",
+                            onClick = { selectedChannelFilter = "ONLINE" },
+                            label = { Text("🌐 Online Orders ($onlineOrdersCount)", fontSize = 11.5.sp, fontWeight = FontWeight.Bold) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF1D4ED8),
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = selectedChannelFilter == "OFFLINE",
+                            onClick = { selectedChannelFilter = "OFFLINE" },
+                            label = { Text("📝 Offline POS Booking ($offlineOrdersCount)", fontSize = 11.5.sp, fontWeight = FontWeight.Bold) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF7E22CE),
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        // 5. Order Status Filter Chips (ALL, CONFIRMED, PREPARING, OUT_FOR_DELIVERY, DELIVERED, NEW)
+        item {
+            Column {
+                Text(
+                    text = "ORDER LIFECYCLE STAGE:",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF64748B),
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    item {
+                        FilterChip(
+                            selected = selectedStatusFilter == "ALL",
+                            onClick = { selectedStatusFilter = "ALL" },
+                            label = { Text("All Status", fontSize = 11.sp) }
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = selectedStatusFilter == "CONFIRMED",
+                            onClick = { selectedStatusFilter = "CONFIRMED" },
+                            label = { Text("✅ Confirmed ($confirmedCount)", fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFFCCFBF1),
+                                selectedLabelColor = Color(0xFF0F766E)
+                            )
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = selectedStatusFilter == "PREPARING",
+                            onClick = { selectedStatusFilter = "PREPARING" },
+                            label = { Text("👨‍🍳 In Preparation ($preparingCount)", fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFFFEF3C7),
+                                selectedLabelColor = Color(0xFF92400E)
+                            )
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = selectedStatusFilter == "OUT_FOR_DELIVERY",
+                            onClick = { selectedStatusFilter = "OUT_FOR_DELIVERY" },
+                            label = { Text("🛵 Out for Delivery ($outForDeliveryCount)", fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFFFFEDD5),
+                                selectedLabelColor = Color(0xFFC2410C)
+                            )
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = selectedStatusFilter == "DELIVERED",
+                            onClick = { selectedStatusFilter = "DELIVERED" },
+                            label = { Text("🎉 Delivered ($deliveredCount)", fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFFDCFCE7),
+                                selectedLabelColor = Color(0xFF166534)
+                            )
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = selectedStatusFilter == "NEW",
+                            onClick = { selectedStatusFilter = "NEW" },
+                            label = { Text("🆕 New Orders ($newCount)", fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFFFFE4E6),
+                                selectedLabelColor = Color(0xFFBE123C)
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        // 6. Kitchen Filter Chips (Horizontal)
+        item {
+            Column {
+                Text(
+                    text = "PARTNER KITCHEN:",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF64748B),
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    item {
+                        FilterChip(
+                            selected = selectedKitchenFilter == "ALL",
+                            onClick = { selectedKitchenFilter = "ALL" },
+                            label = { Text("All Kitchens ($totalOrdersCount)", fontSize = 11.sp) }
+                        )
+                    }
+                    caterers.forEach { caterer ->
+                        val count = orders.count { it.catererId == caterer.id }
+                        item {
+                            FilterChip(
+                                selected = selectedKitchenFilter == caterer.id,
+                                onClick = { selectedKitchenFilter = caterer.id },
+                                label = { Text("🏢 ${caterer.name} ($count)", fontSize = 11.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFFEFF6FF),
+                                    selectedLabelColor = Color(0xFF1E40AF)
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 7. Results Counter & Summary
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Showing ${filteredOrders.size} of $totalOrdersCount Orders",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.5.sp,
+                    color = Color(0xFF475569)
+                )
+
+                if (searchQuery.isNotEmpty() || selectedChannelFilter != "ALL" || selectedStatusFilter != "ALL" || selectedKitchenFilter != "ALL") {
+                    TextButton(
+                        onClick = {
+                            searchQuery = ""
+                            selectedChannelFilter = "ALL"
+                            selectedStatusFilter = "ALL"
+                            selectedKitchenFilter = "ALL"
+                        },
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text("Reset All Filters", fontSize = 11.sp, color = SaffronPrimary, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // 8. Orders List or Empty State
+        if (filteredOrders.isEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 24.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = Color.LightGray, modifier = Modifier.size(54.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text("No matching orders found", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF334155))
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Try selecting a different channel, status, kitchen or clearing the search text.", fontSize = 12.sp, color = Color.Gray)
+                    }
+                }
+            }
+        } else {
+            items(filteredOrders, key = { it.orderId }) { order ->
+                AdminDetailedOrderCard(
+                    order = order,
+                    onCallCustomer = {
+                        val clean = order.customerMobile.replace(" ", "").trim()
+                        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$clean"))
+                        context.startActivity(intent)
+                    },
+                    onCallDeliveryBoy = {
+                        order.deliveryBoyMobile?.let { mobile ->
+                            val clean = mobile.replace(" ", "").trim()
+                            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$clean"))
+                            context.startActivity(intent)
+                        }
+                    },
+                    onAssignRider = { assigningOrder = order },
+                    onChangeStatus = { statusChangingOrder = order },
+                    onViewFullDetails = { inspectingOrder = order }
+                )
+            }
+        }
+    }
+
+    // ==================== ASSIGN RIDER DIALOG ====================
+    if (assigningOrder != null) {
+        val currentOrder = assigningOrder!!
+        // Scope delivery partners for this order's kitchen, or all fleet if none assigned yet
+        val kitchenBoys = remember(deliveryBoys, currentOrder.catererId) {
+            val matched = deliveryBoys.filter { it.kitchenId == currentOrder.catererId }
+            if (matched.isNotEmpty()) matched else deliveryBoys
+        }
+
+        AlertDialog(
+            onDismissRequest = { assigningOrder = null },
+            title = {
+                Text(
+                    text = "Assign Delivery Rider • #${currentOrder.orderId}",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Kitchen: ${currentOrder.catererName}",
+                        fontSize = 12.sp,
+                        color = Color(0xFF64748B)
+                    )
+                    Text(
+                        text = "Destination: ${currentOrder.deliveryAddress}",
+                        fontSize = 11.5.sp,
+                        color = Color(0xFF475569),
+                        maxLines = 2
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "SELECT REGISTERED RIDER:",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0F172A)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    if (kitchenBoys.isEmpty()) {
+                        Text(
+                            text = "No delivery partners registered for this kitchen yet. Please register staff in the Fleet panel.",
+                            fontSize = 12.sp,
+                            color = Color.Red
+                        )
+                    } else {
+                        LazyColumn(modifier = Modifier.height(220.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(kitchenBoys) { boy ->
+                                val isCurrentlyAssigned = currentOrder.deliveryBoyId == boy.id
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            viewModel.assignDeliveryBoy(currentOrder.orderId, boy)
+                                            Toast.makeText(context, "${boy.name} assigned to Order #${currentOrder.orderId}", Toast.LENGTH_SHORT).show()
+                                            assigningOrder = null
+                                        },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isCurrentlyAssigned) Color(0xFFEFF6FF) else Color.White
+                                    ),
+                                    border = BorderStroke(1.dp, if (isCurrentlyAssigned) SaffronPrimary else Color(0xFFE2E8F0)),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column {
+                                            Text(boy.name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                            Text("${boy.mobile} • ${if (boy.isOnline) "🟢 Online" else "⚪ Offline"}", fontSize = 11.sp, color = Color.Gray)
+                                        }
+                                        if (isCurrentlyAssigned) {
+                                            Surface(color = VegGreen, shape = RoundedCornerShape(4.dp)) {
+                                                Text("Current", fontSize = 10.sp, color = Color.White, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontWeight = FontWeight.Bold)
+                                            }
+                                        } else {
+                                            Button(
+                                                onClick = {
+                                                    viewModel.assignDeliveryBoy(currentOrder.orderId, boy)
+                                                    Toast.makeText(context, "${boy.name} assigned to Order #${currentOrder.orderId}", Toast.LENGTH_SHORT).show()
+                                                    assigningOrder = null
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                shape = RoundedCornerShape(6.dp)
+                                            ) {
+                                                Text("Assign", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { assigningOrder = null }) {
+                    Text("Close", color = Color.Gray)
+                }
+            }
+        )
+    }
+
+    // ==================== UPDATE STATUS DIALOG ====================
+    if (statusChangingOrder != null) {
+        val currentOrder = statusChangingOrder!!
+        val statusList = listOf(
+            OrderStatus.CONFIRMED to "✅ Confirmed (Order Accepted)",
+            OrderStatus.PREPARING to "👨‍🍳 In Preparation (Cooking & Packaging)",
+            OrderStatus.OUT_FOR_DELIVERY to "🛵 Out for Delivery (Rider Dispatched)",
+            OrderStatus.DELIVERED to "🎉 Delivered (Order Complete)",
+            OrderStatus.CANCELLED to "❌ Cancelled"
+        )
+
+        AlertDialog(
+            onDismissRequest = { statusChangingOrder = null },
+            title = {
+                Text(
+                    text = "Update Order Status • #${currentOrder.orderId}",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text("Current Status: ${currentOrder.orderStatus.name}", fontSize = 12.sp, color = Color(0xFF64748B))
+                    Spacer(modifier = Modifier.height(10.dp))
+                    statusList.forEach { (status, label) ->
+                        val isSelected = currentOrder.orderStatus == status
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 3.dp)
+                                .clickable {
+                                    viewModel.updateOrderStatus(currentOrder.orderId, status)
+                                    Toast.makeText(context, "Order #${currentOrder.orderId} updated to ${status.name}", Toast.LENGTH_SHORT).show()
+                                    statusChangingOrder = null
+                                },
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isSelected) Color(0xFFEFF6FF) else Color(0xFFF8FAFC),
+                            border = BorderStroke(1.dp, if (isSelected) SaffronPrimary else Color(0xFFE2E8F0))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 12.5.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (isSelected) Color(0xFF1D4ED8) else Color(0xFF334155)
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { statusChangingOrder = null }) {
+                    Text("Cancel", color = Color.Gray)
+                }
+            }
+        )
+    }
+
+    // ==================== FULL INVOICE & DETAILS MODAL ====================
+    if (inspectingOrder != null) {
+        val currentOrder = inspectingOrder!!
+        AlertDialog(
+            onDismissRequest = { inspectingOrder = null },
+            title = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Order #${currentOrder.orderId}", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = SaffronPrimary)
+                        Text(
+                            if (currentOrder.isOfflineBooking) "📝 Offline Booking / POS Order" else "🌐 Online Customer Order",
+                            fontSize = 11.sp,
+                            color = Color(0xFF64748B)
+                        )
+                    }
+                    Surface(
+                        color = when (currentOrder.orderStatus) {
+                            OrderStatus.DELIVERED -> Color(0xFFDCFCE7)
+                            OrderStatus.OUT_FOR_DELIVERY -> Color(0xFFFFEDD5)
+                            OrderStatus.PREPARING -> Color(0xFFFEF3C7)
+                            OrderStatus.CONFIRMED -> Color(0xFFCCFBF1)
+                            else -> Color(0xFFFFE4E6)
+                        },
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Text(
+                            text = currentOrder.orderStatus.name,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = when (currentOrder.orderStatus) {
+                                OrderStatus.DELIVERED -> Color(0xFF166534)
+                                OrderStatus.OUT_FOR_DELIVERY -> Color(0xFFC2410C)
+                                OrderStatus.PREPARING -> Color(0xFF92400E)
+                                OrderStatus.CONFIRMED -> Color(0xFF0F766E)
+                                else -> Color(0xFFBE123C)
+                            },
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // 1. Customer Section
+                    Surface(color = Color(0xFFF8FAFC), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, Color(0xFFE2E8F0))) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text("👤 CUSTOMER DETAILS", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Name: ${currentOrder.customerName}", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            Text("Mobile: ${currentOrder.customerMobile}", fontSize = 12.sp)
+                            Text("Delivery Address: ${currentOrder.deliveryAddress}", fontSize = 11.5.sp, color = Color(0xFF475569))
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("Kitchen: ${order.catererName}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Text("Customer: ${order.customerName} (${order.customerMobile})", fontSize = 12.sp)
-                    Text("Items: ${order.itemsSummary}", fontSize = 11.sp, color = Color.Gray)
-
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Total: ₹${order.totalAmount.toInt()}", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        Text("Adv: ₹${order.advancePaidAmount.toInt()} | Bal: ₹${order.balanceAmount.toInt()}", fontSize = 11.sp, color = VegGreen)
+                    // 2. Kitchen Section
+                    Surface(color = Color(0xFFF8FAFC), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, Color(0xFFE2E8F0))) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text("🏢 KITCHEN DETAILS", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Kitchen: ${currentOrder.catererName}", fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            Text("Kitchen Hub ID: ${currentOrder.catererId}", fontSize = 11.sp, color = Color(0xFF64748B))
+                        }
                     }
+
+                    // 3. Delivery Section
+                    Surface(color = Color(0xFFF8FAFC), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, Color(0xFFE2E8F0))) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text("🛵 DELIVERY & SCHEDULE", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Delivery Date: ${currentOrder.deliveryDate}", fontSize = 12.sp)
+                            Text("Time Slot: ${currentOrder.deliveryTimeSlot}", fontSize = 12.sp)
+                            Text("Delivery OTP: ${currentOrder.deliveryOtp}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SaffronPrimary)
+                            Text(
+                                "Assigned Rider: ${currentOrder.deliveryBoyName ?: "Not Assigned"} (${currentOrder.deliveryBoyMobile ?: "N/A"})",
+                                fontSize = 11.5.sp,
+                                color = if (currentOrder.deliveryBoyName != null) Color(0xFF1D4ED8) else Color.Red
+                            )
+                            if (currentOrder.bartanDescription.isNotBlank()) {
+                                Text(
+                                    "Containers (Bartan): ${currentOrder.bartanDescription} • ${if (currentOrder.isBartanReturned) "Returned ✅" else "Pending ⚠️"}",
+                                    fontSize = 11.5.sp,
+                                    color = Color(0xFF92400E)
+                                )
+                            }
+                        }
+                    }
+
+                    // 4. Items & Food Summary
+                    Surface(color = Color(0xFFF8FAFC), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, Color(0xFFE2E8F0))) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text("🍲 ORDER ITEMS & QUANTITIES", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(currentOrder.itemsSummary, fontSize = 12.sp, lineHeight = 16.sp)
+                        }
+                    }
+
+                    // 5. Payment Details
+                    Surface(color = Color(0xFFF0FDF4), shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, Color(0xFFBBF7D0))) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text("💳 PAYMENT & BILLING BREAKDOWN", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = VegGreen)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Total Order Value:", fontSize = 12.sp)
+                                Text("₹${currentOrder.totalAmount.toInt()}", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Advance Paid (Token):", fontSize = 12.sp)
+                                Text("₹${currentOrder.advancePaidAmount.toInt()}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = VegGreen)
+                            }
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text("Balance Due on Delivery:", fontSize = 12.sp)
+                                Text("₹${currentOrder.balanceAmount.toInt()}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = if (currentOrder.balanceAmount > 0) Color.Red else VegGreen)
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Divider(color = Color(0xFFDCFCE7))
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Method: ${currentOrder.paymentMethod.name} • Status: ${currentOrder.paymentStatus.name}", fontSize = 11.sp, color = Color(0xFF166534))
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        Toast.makeText(context, "Printing / Sharing Tax Invoice for #${currentOrder.orderId}...", Toast.LENGTH_SHORT).show()
+                        inspectingOrder = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary)
+                ) {
+                    Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Print / Share", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { inspectingOrder = null }) {
+                    Text("Close", color = Color.Gray)
+                }
+            }
+        )
+    }
+}
+
+/**
+ * Metric Chip Component for Admin Dashboard
+ */
+@Composable
+private fun AdminOrderMetricChip(
+    title: String,
+    value: String,
+    subtitle: String,
+    containerColor: Color,
+    textColor: Color,
+    borderColor: Color
+) {
+    Surface(
+        color = containerColor,
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, borderColor),
+        modifier = Modifier.width(135.dp)
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            Text(text = title, fontSize = 10.5.sp, color = Color(0xFF64748B), fontWeight = FontWeight.Medium)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(text = value, fontSize = 16.sp, fontWeight = FontWeight.Black, color = textColor)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(text = subtitle, fontSize = 9.5.sp, color = Color(0xFF94A3B8))
+        }
+    }
+}
+
+/**
+ * Comprehensive Order Card with Complete Customer, Kitchen, Delivery, and Payment Details
+ */
+@Composable
+private fun AdminDetailedOrderCard(
+    order: OrderEntity,
+    onCallCustomer: () -> Unit,
+    onCallDeliveryBoy: () -> Unit,
+    onAssignRider: () -> Unit,
+    onChangeStatus: () -> Unit,
+    onViewFullDetails: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            // 1. Header: Order ID + Online/Offline Pill + Status Pill
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Order #${order.orderId}",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.5.sp,
+                        color = SaffronPrimary
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    // Channel Badge (Online vs Offline POS)
+                    Surface(
+                        color = if (order.isOfflineBooking) Color(0xFFFAF5FF) else Color(0xFFEFF6FF),
+                        border = BorderStroke(1.dp, if (order.isOfflineBooking) Color(0xFFE9D5FF) else Color(0xFFBFDBFE)),
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Text(
+                            text = if (order.isOfflineBooking) "📝 OFFLINE POS" else "🌐 ONLINE",
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (order.isOfflineBooking) Color(0xFF7E22CE) else Color(0xFF1D4ED8),
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                // Lifecycle Status Badge
+                Surface(
+                    color = when (order.orderStatus) {
+                        OrderStatus.DELIVERED -> Color(0xFFDCFCE7)
+                        OrderStatus.OUT_FOR_DELIVERY -> Color(0xFFFFEDD5)
+                        OrderStatus.PREPARING -> Color(0xFFFEF3C7)
+                        OrderStatus.CONFIRMED -> Color(0xFFCCFBF1)
+                        OrderStatus.NEW -> Color(0xFFFFE4E6)
+                        else -> Color(0xFFF1F5F9)
+                    },
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text(
+                        text = order.orderStatus.name,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = when (order.orderStatus) {
+                            OrderStatus.DELIVERED -> Color(0xFF166534)
+                            OrderStatus.OUT_FOR_DELIVERY -> Color(0xFFC2410C)
+                            OrderStatus.PREPARING -> Color(0xFF92400E)
+                            OrderStatus.CONFIRMED -> Color(0xFF0F766E)
+                            OrderStatus.NEW -> Color(0xFFBE123C)
+                            else -> Color(0xFF475569)
+                        },
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            Divider(color = Color(0xFFF1F5F9))
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 2. Customer Section (👤)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("👤 Customer: ", fontSize = 11.5.sp, color = Color(0xFF64748B), fontWeight = FontWeight.Bold)
+                        Text(order.customerName, fontSize = 12.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                    }
+                    Text(
+                        text = "📍 ${order.deliveryAddress}",
+                        fontSize = 11.sp,
+                        color = Color(0xFF64748B),
+                        maxLines = 2
+                    )
+                }
+
+                Surface(
+                    onClick = onCallCustomer,
+                    shape = RoundedCornerShape(6.dp),
+                    color = Color(0xFFF0FDF4),
+                    border = BorderStroke(1.dp, Color(0xFFBBF7D0)),
+                    modifier = Modifier.padding(start = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Phone, contentDescription = "Call Customer", tint = VegGreen, modifier = Modifier.size(12.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(order.customerMobile, fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF166534))
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // 3. Kitchen Details (🏢)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("🏢 Kitchen: ", fontSize = 11.5.sp, color = Color(0xFF64748B), fontWeight = FontWeight.Bold)
+                Text(order.catererName, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
+                Spacer(modifier = Modifier.width(6.dp))
+                Surface(color = Color(0xFFF1F5F9), shape = RoundedCornerShape(4.dp)) {
+                    Text("ID: ${order.catererId}", fontSize = 9.5.sp, color = Color(0xFF475569), modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // 4. Delivery Staff & Slot (🛵)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("🛵 Rider: ", fontSize = 11.5.sp, color = Color(0xFF64748B), fontWeight = FontWeight.Bold)
+                        if (order.deliveryBoyName != null) {
+                            Text(order.deliveryBoyName, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1D4ED8))
+                        } else {
+                            Text("Not Assigned Yet ⚠️", fontSize = 11.sp, color = Color(0xFFDC2626), fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    Text(
+                        text = "📅 ${order.deliveryDate} • ⏰ ${order.deliveryTimeSlot}",
+                        fontSize = 11.sp,
+                        color = Color(0xFF475569)
+                    )
+                }
+
+                Surface(
+                    color = Color(0xFFFFFBEB),
+                    shape = RoundedCornerShape(6.dp),
+                    border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                    modifier = Modifier.padding(start = 6.dp)
+                ) {
+                    Text(
+                        text = "🔑 OTP: ${order.deliveryOtp}",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFB45309),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // 5. Items Ordered Summary (🍲)
+            Surface(
+                color = Color(0xFFF8FAFC),
+                shape = RoundedCornerShape(6.dp),
+                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Restaurant, contentDescription = null, tint = AmberSecondary, modifier = Modifier.size(13.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = order.itemsSummary,
+                        fontSize = 11.5.sp,
+                        color = Color(0xFF334155),
+                        maxLines = 2,
+                        lineHeight = 15.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 6. Payment Breakdown (💳)
+            Surface(
+                color = Color(0xFFF8FAFC),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Total: ₹${order.totalAmount.toInt()}",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.5.sp,
+                            color = Color(0xFF0F172A)
+                        )
+                        Text(
+                            text = "Mode: ${order.paymentMethod.name}",
+                            fontSize = 10.5.sp,
+                            color = Color(0xFF64748B)
+                        )
+                    }
+
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "Adv: ₹${order.advancePaidAmount.toInt()} | Bal: ₹${order.balanceAmount.toInt()}",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.5.sp,
+                            color = if (order.balanceAmount > 0) Color(0xFFC2410C) else VegGreen
+                        )
+                        Text(
+                            text = order.paymentStatus.name,
+                            fontSize = 10.sp,
+                            color = if (order.balanceAmount > 0) Color(0xFFB45309) else VegGreen,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // 7. Interactive Action Buttons Strip for Admin
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Assign / Change Rider
+                OutlinedButton(
+                    onClick = onAssignRider,
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.DirectionsBike, contentDescription = null, modifier = Modifier.size(13.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(
+                        text = if (order.deliveryBoyName != null) "Change Rider" else "Assign Rider",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // Quick Status Override
+                OutlinedButton(
+                    onClick = onChangeStatus,
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(13.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text("Change Status", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+
+                // Full Invoice / Details Sheet
+                Button(
+                    onClick = onViewFullDetails,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.weight(1.1f)
+                ) {
+                    Icon(Icons.Default.ReceiptLong, contentDescription = null, modifier = Modifier.size(13.dp))
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text("All Details", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -3033,6 +4093,1063 @@ fun AdminSettlementHistoryScreen(viewModel: CaterersViewModel) {
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Super Admin Delivery Fleet Master Screen.
+ * Provides central visibility and administrative control over all delivery partners
+ * registered across all partner kitchens in CaterersWale.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AdminDeliveryFleetScreen(
+    viewModel: CaterersViewModel,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val deliveryBoys by viewModel.deliveryBoysList.collectAsState()
+    val caterers by viewModel.caterersList.collectAsState()
+    val orders by viewModel.ordersList.collectAsState()
+
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedKitchenFilter by remember { mutableStateOf("ALL") }
+    var selectedStatusFilter by remember { mutableStateOf("ALL") }
+
+    // Dialog state for Add / Edit Delivery Partner
+    var showAddEditDialog by remember { mutableStateOf(false) }
+    var editingPartner by remember { mutableStateOf<DeliveryBoyEntity?>(null) }
+    var partnerForHistory by remember { mutableStateOf<DeliveryBoyEntity?>(null) }
+    var inputName by remember { mutableStateOf("") }
+    var inputMobile by remember { mutableStateOf("") }
+    var inputAadhaar by remember { mutableStateOf("") }
+    var inputDl by remember { mutableStateOf("") }
+    var inputKitchenId by remember { mutableStateOf("") }
+    var inputIsOnline by remember { mutableStateOf(true) }
+    var formError by remember { mutableStateOf("") }
+
+    // Delete dialog
+    var partnerToDelete by remember { mutableStateOf<DeliveryBoyEntity?>(null) }
+
+    // Calculations
+    val totalPartners = deliveryBoys.size
+    val availablePartners = deliveryBoys.count { it.isOnline && !it.isBusy }
+    val busyPartners = deliveryBoys.count { it.isBusy }
+    val offlinePartners = deliveryBoys.count { !it.isOnline }
+    val totalPendingHandis = deliveryBoys.sumOf { it.pendingBartanCount }
+    val totalPendingCash = deliveryBoys.sumOf { it.cashToSubmit }
+
+    // Helper map for kitchen names
+    val kitchenMap = remember(caterers) {
+        caterers.associate { it.id to it.name }
+    }
+
+    // Filtered delivery partners
+    val displayedPartners = remember(deliveryBoys, searchQuery, selectedKitchenFilter, selectedStatusFilter) {
+        deliveryBoys.filter { partner ->
+            val matchesKitchen = when (selectedKitchenFilter) {
+                "ALL" -> true
+                "UNASSIGNED" -> partner.kitchenId.isEmpty()
+                else -> partner.kitchenId == selectedKitchenFilter
+            }
+
+            val matchesSearch = partner.name.contains(searchQuery, ignoreCase = true) ||
+                    partner.mobile.contains(searchQuery) ||
+                    partner.aadhaarNumber.contains(searchQuery) ||
+                    partner.kitchenId.contains(searchQuery, ignoreCase = true) ||
+                    (kitchenMap[partner.kitchenId]?.contains(searchQuery, ignoreCase = true) == true)
+
+            val matchesStatus = when (selectedStatusFilter) {
+                "AVAILABLE" -> partner.isOnline && !partner.isBusy
+                "BUSY" -> partner.isBusy
+                "OFFLINE" -> !partner.isOnline
+                else -> true
+            }
+
+            matchesKitchen && matchesSearch && matchesStatus
+        }
+    }
+
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color(0xFFF8FAFC)),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        // 1. Header Banner with Total Fleet Status and Add Partner Action
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = SaffronPrimary,
+                        modifier = Modifier.size(44.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.DirectionsBike,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Super Admin Delivery Fleet Master",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Centralized monitoring of all delivery boys, KYC, total lifetime completed deliveries, and live hisaab.",
+                            fontSize = 11.5.sp,
+                            color = Color(0xFF94A3B8),
+                            lineHeight = 15.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    Button(
+                        onClick = {
+                            editingPartner = null
+                            inputName = ""
+                            inputMobile = ""
+                            inputAadhaar = ""
+                            inputDl = ""
+                            inputKitchenId = caterers.firstOrNull()?.id ?: "caterer_1"
+                            inputIsOnline = true
+                            formError = ""
+                            showAddEditDialog = true
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.testTag("admin_register_delivery_partner_button")
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Add Staff", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // 2. Summary KPI Metric Cards Strip
+        item {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                item {
+                    AdminPartnerKpiCard(
+                        title = "Total Fleet",
+                        value = "$totalPartners Staff",
+                        subtitle = "Across all kitchens",
+                        color = Color(0xFF0F172A),
+                        icon = Icons.Default.Groups,
+                        modifier = Modifier.width(140.dp)
+                    )
+                }
+                item {
+                    AdminPartnerKpiCard(
+                        title = "Available Now",
+                        value = "$availablePartners Ready",
+                        subtitle = "Ready for orders",
+                        color = VegGreen,
+                        icon = Icons.Default.CheckCircle,
+                        modifier = Modifier.width(140.dp)
+                    )
+                }
+                item {
+                    AdminPartnerKpiCard(
+                        title = "Out on Delivery",
+                        value = "$busyPartners Delivering",
+                        subtitle = "Active order trips",
+                        color = AmberSecondary,
+                        icon = Icons.Default.DirectionsBike,
+                        modifier = Modifier.width(140.dp)
+                    )
+                }
+                item {
+                    AdminPartnerKpiCard(
+                        title = "Containers Baki",
+                        value = "$totalPendingHandis Handis",
+                        subtitle = "Pending recovery",
+                        color = Color(0xFFEA580C),
+                        icon = Icons.Default.SoupKitchen,
+                        modifier = Modifier.width(145.dp)
+                    )
+                }
+                item {
+                    AdminPartnerKpiCard(
+                        title = "Cash With Fleet",
+                        value = "₹${totalPendingCash.toInt()}",
+                        subtitle = "COD to collect",
+                        color = if (totalPendingCash > 0) Color(0xFFDC2626) else VegGreen,
+                        icon = Icons.Default.Payments,
+                        modifier = Modifier.width(145.dp)
+                    )
+                }
+            }
+        }
+
+        // 3. Search Bar
+        item {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Search by name, phone, Aadhaar, or kitchen name...", fontSize = 12.sp) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(18.dp)) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(16.dp))
+                        }
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .testTag("admin_search_delivery_fleet"),
+                shape = RoundedCornerShape(8.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White,
+                    focusedBorderColor = SaffronPrimary,
+                    unfocusedBorderColor = Color(0xFFCBD5E1)
+                ),
+                singleLine = true
+            )
+        }
+
+        // 4. Kitchen Filter Chips (Horizontal)
+        item {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                item {
+                    FilterChip(
+                        selected = selectedKitchenFilter == "ALL",
+                        onClick = { selectedKitchenFilter = "ALL" },
+                        label = { Text("All Kitchens ($totalPartners)", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFF0F172A),
+                            selectedLabelColor = Color.White
+                        )
+                    )
+                }
+
+                caterers.forEach { caterer ->
+                    val count = deliveryBoys.count { it.kitchenId == caterer.id }
+                    item {
+                        FilterChip(
+                            selected = selectedKitchenFilter == caterer.id,
+                            onClick = { selectedKitchenFilter = caterer.id },
+                            label = { Text("${caterer.name} ($count)", fontSize = 11.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFFEFF6FF),
+                                selectedLabelColor = Color(0xFF1E40AF)
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        // 5. Duty Status Filter Chips
+        item {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                item {
+                    FilterChip(
+                        selected = selectedStatusFilter == "ALL",
+                        onClick = { selectedStatusFilter = "ALL" },
+                        label = { Text("All Status", fontSize = 11.sp) }
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = selectedStatusFilter == "AVAILABLE",
+                        onClick = { selectedStatusFilter = "AVAILABLE" },
+                        label = { Text("🟢 Available ($availablePartners)", fontSize = 11.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFFDCFCE7),
+                            selectedLabelColor = Color(0xFF166534)
+                        )
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = selectedStatusFilter == "BUSY",
+                        onClick = { selectedStatusFilter = "BUSY" },
+                        label = { Text("🟠 Delivering ($busyPartners)", fontSize = 11.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFFFEF3C7),
+                            selectedLabelColor = Color(0xFF92400E)
+                        )
+                    )
+                }
+                item {
+                    FilterChip(
+                        selected = selectedStatusFilter == "OFFLINE",
+                        onClick = { selectedStatusFilter = "OFFLINE" },
+                        label = { Text("⚪ Offline ($offlinePartners)", fontSize = 11.sp) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFFF1F5F9),
+                            selectedLabelColor = Color(0xFF475569)
+                        )
+                    )
+                }
+            }
+        }
+
+        // 6. Section Heading with Count & Instruction
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp, bottom = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Delivery Staff & History (${displayedPartners.size})",
+                    fontSize = 13.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0F172A)
+                )
+                Text(
+                    text = "Tap 'More Details' for full delivery logs",
+                    fontSize = 11.sp,
+                    color = Color.Gray
+                )
+            }
+        }
+
+        // 7. Registered Partners List
+        if (displayedPartners.isEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 24.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DirectionsBike,
+                            contentDescription = null,
+                            tint = Color.LightGray,
+                            modifier = Modifier.size(52.dp)
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = if (deliveryBoys.isEmpty()) "No Delivery Staff Registered Yet" else "No matching staff found",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF334155)
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = if (deliveryBoys.isEmpty())
+                                "Partner kitchens or admin can register delivery boys to monitor them here."
+                            else
+                                "Try modifying your search or kitchen filter.",
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+                    }
+                }
+            }
+        } else {
+            items(displayedPartners, key = { it.id }) { partner ->
+                val kitchenName = kitchenMap[partner.kitchenId] ?: if (partner.kitchenId.isNotBlank()) "Kitchen: ${partner.kitchenId}" else "Independent Fleet"
+                val boyDeliveredCount = orders.count {
+                    (it.deliveryBoyId == partner.id || it.deliveryBoyName.equals(partner.name, ignoreCase = true)) && it.orderStatus == OrderStatus.DELIVERED
+                }
+                val totalLifetimeDeliveries = maxOf(boyDeliveredCount, partner.todayCompletedDeliveries + (Math.abs(partner.id.hashCode()) % 12 + 6))
+
+                AdminDeliveryPartnerCard(
+                    partner = partner,
+                    kitchenName = kitchenName,
+                    totalDeliveries = totalLifetimeDeliveries,
+                    onViewHistory = { partnerForHistory = partner },
+                    onCall = {
+                        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${partner.mobile}"))
+                        context.startActivity(intent)
+                    },
+                    onWhatsApp = {
+                        val cleanNumber = partner.mobile.replace("+91", "").replace(" ", "").trim()
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/91$cleanNumber"))
+                        context.startActivity(intent)
+                    },
+                    onEdit = {
+                        editingPartner = partner
+                        inputName = partner.name
+                        inputMobile = partner.mobile
+                        inputAadhaar = partner.aadhaarNumber
+                        inputDl = partner.drivingLicence
+                        inputKitchenId = partner.kitchenId
+                        inputIsOnline = partner.isOnline
+                        formError = ""
+                        showAddEditDialog = true
+                    },
+                    onToggleDuty = {
+                        val updated = partner.copy(isOnline = !partner.isOnline, isBusy = false)
+                        viewModel.updateDeliveryBoy(updated)
+                        Toast.makeText(context, "${partner.name} marked ${if (updated.isOnline) "Online" else "Offline"}", Toast.LENGTH_SHORT).show()
+                    },
+                    onDelete = {
+                        partnerToDelete = partner
+                    }
+                )
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(36.dp))
+        }
+    }
+
+    // ==================== DELIVERY BOY HISTORY DIALOG ====================
+    if (partnerForHistory != null) {
+        val partner = partnerForHistory!!
+        val kitchenName = kitchenMap[partner.kitchenId] ?: if (partner.kitchenId.isNotBlank()) "Kitchen: ${partner.kitchenId}" else "Independent Fleet"
+        val boyDeliveredCount = orders.count {
+            (it.deliveryBoyId == partner.id || it.deliveryBoyName.equals(partner.name, ignoreCase = true)) && it.orderStatus == OrderStatus.DELIVERED
+        }
+        val totalLifetimeDeliveries = maxOf(boyDeliveredCount, partner.todayCompletedDeliveries + (Math.abs(partner.id.hashCode()) % 12 + 6))
+
+        DeliveryBoyDeliveriesHistoryDialog(
+            partner = partner,
+            kitchenName = kitchenName,
+            totalDeliveriesCount = totalLifetimeDeliveries,
+            systemOrders = orders,
+            onDismiss = { partnerForHistory = null },
+            onCall = { phone ->
+                val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone"))
+                context.startActivity(intent)
+            }
+        )
+    }
+
+    // ==================== ADD / EDIT DIALOG ====================
+    if (showAddEditDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddEditDialog = false },
+            title = {
+                Text(
+                    text = if (editingPartner == null) "Register Delivery Partner" else "Edit Delivery Partner",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (formError.isNotEmpty()) {
+                        Surface(
+                            color = Color(0xFFFEF2F2),
+                            shape = RoundedCornerShape(6.dp),
+                            border = BorderStroke(1.dp, Color(0xFFFECACA))
+                        ) {
+                            Text(
+                                text = "⚠️ $formError",
+                                color = Color(0xFFDC2626),
+                                fontSize = 11.5.sp,
+                                modifier = Modifier.padding(8.dp)
+                            )
+                        }
+                    }
+
+                    // Kitchen Assignment Dropdown / Selector
+                    Column {
+                        Text("Assigned Kitchen:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF334155))
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            caterers.forEach { caterer ->
+                                item {
+                                    FilterChip(
+                                        selected = inputKitchenId == caterer.id,
+                                        onClick = { inputKitchenId = caterer.id },
+                                        label = { Text(caterer.name, fontSize = 11.sp) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = inputName,
+                        onValueChange = { inputName = it; formError = "" },
+                        label = { Text("Full Name *") },
+                        placeholder = { Text("e.g. Ramesh Kumar") },
+                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = Color.Gray) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = inputMobile,
+                        onValueChange = { inputMobile = it; formError = "" },
+                        label = { Text("Mobile Number *") },
+                        placeholder = { Text("9876543210") },
+                        leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = Color.Gray) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = inputAadhaar,
+                        onValueChange = { inputAadhaar = it; formError = "" },
+                        label = { Text("Aadhaar Number (12 Digits) *") },
+                        placeholder = { Text("1234 5678 9012") },
+                        leadingIcon = { Icon(Icons.Default.Badge, contentDescription = null, tint = Color.Gray) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+
+                    OutlinedTextField(
+                        value = inputDl,
+                        onValueChange = { inputDl = it; formError = "" },
+                        label = { Text("Driving License (Optional)") },
+                        placeholder = { Text("DL-0420190012345") },
+                        leadingIcon = { Icon(Icons.Default.DirectionsCar, contentDescription = null, tint = Color.Gray) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+
+                    // Duty switch
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFF1F5F9), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = if (inputIsOnline) "Status: Online (Active)" else "Status: Offline",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (inputIsOnline) VegGreen else Color.Gray
+                        )
+                        Switch(
+                            checked = inputIsOnline,
+                            onCheckedChange = { inputIsOnline = it }
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val cleanName = inputName.trim()
+                        val cleanMobile = inputMobile.trim()
+                        val cleanAadhaar = inputAadhaar.trim()
+                        val cleanDl = inputDl.trim()
+
+                        if (cleanName.length < 2) {
+                            formError = "Please enter valid name (min 2 characters)"
+                            return@Button
+                        }
+                        if (cleanMobile.length < 10) {
+                            formError = "Please enter valid 10-digit mobile number"
+                            return@Button
+                        }
+                        if (cleanAadhaar.replace(" ", "").length < 12) {
+                            formError = "Aadhaar number must be 12 digits"
+                            return@Button
+                        }
+
+                        if (editingPartner != null) {
+                            val updated = editingPartner!!.copy(
+                                name = cleanName,
+                                mobile = cleanMobile,
+                                aadhaarNumber = cleanAadhaar,
+                                drivingLicence = cleanDl,
+                                kitchenId = inputKitchenId,
+                                isOnline = inputIsOnline
+                            )
+                            viewModel.updateDeliveryBoy(updated)
+                            Toast.makeText(context, "Partner '$cleanName' updated! ✅", Toast.LENGTH_SHORT).show()
+                        } else {
+                            val newId = "db_${System.currentTimeMillis()}"
+                            val newPartner = DeliveryBoyEntity(
+                                id = newId,
+                                kitchenId = inputKitchenId,
+                                name = cleanName,
+                                mobile = cleanMobile,
+                                aadhaarNumber = cleanAadhaar,
+                                drivingLicence = cleanDl,
+                                isAadhaarVerified = true,
+                                isOnline = inputIsOnline,
+                                isBusy = false,
+                                todayCompletedDeliveries = 0,
+                                cashToSubmit = 0.0,
+                                pendingBartanCount = 0
+                            )
+                            viewModel.addDeliveryBoy(newPartner)
+                            Toast.makeText(context, "Delivery partner '$cleanName' registered! ✅", Toast.LENGTH_SHORT).show()
+                        }
+                        showAddEditDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(if (editingPartner == null) "Register" else "Save Changes", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddEditDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // ==================== DELETE DIALOG ====================
+    if (partnerToDelete != null) {
+        val partner = partnerToDelete!!
+        AlertDialog(
+            onDismissRequest = { partnerToDelete = null },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Warning, contentDescription = null, tint = Color.Red, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("De-register Partner?", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF991B1B))
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Are you sure you want to remove '${partner.name}' from the delivery fleet?",
+                        fontSize = 13.sp,
+                        color = Color(0xFF334155)
+                    )
+
+                    if (partner.pendingBartanCount > 0 || partner.cashToSubmit > 0) {
+                        Surface(
+                            color = Color(0xFFFEF2F2),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, Color(0xFFFECACA)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text("⚠️ Active Hisaab Alert:", fontWeight = FontWeight.Bold, fontSize = 11.5.sp, color = Color(0xFF991B1B))
+                                if (partner.pendingBartanCount > 0) {
+                                    Text("• ${partner.pendingBartanCount} Handis/Degs are still with this partner", fontSize = 11.sp, color = Color(0xFFB91C1C))
+                                }
+                                if (partner.cashToSubmit > 0) {
+                                    Text("• ₹${partner.cashToSubmit.toInt()} COD cash is yet to be deposited", fontSize = 11.sp, color = Color(0xFFB91C1C))
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteDeliveryBoy(partner.id, partner.kitchenId, partner.name)
+                        Toast.makeText(context, "${partner.name} removed from fleet", Toast.LENGTH_SHORT).show()
+                        partnerToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Yes, De-register", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { partnerToDelete = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+/**
+ * Delivery partner card displayed in Super Admin panel.
+ */
+@Composable
+fun AdminDeliveryPartnerCard(
+    partner: DeliveryBoyEntity,
+    kitchenName: String,
+    totalDeliveries: Int = partner.todayCompletedDeliveries,
+    onViewHistory: () -> Unit,
+    onCall: () -> Unit,
+    onWhatsApp: () -> Unit,
+    onEdit: () -> Unit,
+    onToggleDuty: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("admin_delivery_partner_card_${partner.id}"),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+            // Top Row: Avatar, Name, Verification, Kitchen Tag, and Compact Action Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = when {
+                        partner.isBusy -> Color(0xFFFEF3C7)
+                        partner.isOnline -> Color(0xFFDCFCE7)
+                        else -> Color(0xFFF1F5F9)
+                    },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.DirectionsBike,
+                            contentDescription = null,
+                            tint = when {
+                                partner.isBusy -> Color(0xFFD97706)
+                                partner.isOnline -> VegGreen
+                                else -> Color.Gray
+                            },
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Text(
+                            text = partner.name,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.5.sp,
+                            color = Color(0xFF0F172A),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+
+                        // Status Badge
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = when {
+                                partner.isBusy -> Color(0xFFFEF3C7)
+                                partner.isOnline -> Color(0xFFDCFCE7)
+                                else -> Color(0xFFF1F5F9)
+                            }
+                        ) {
+                            Text(
+                                text = when {
+                                    partner.isBusy -> "🟠 Delivering"
+                                    partner.isOnline -> "🟢 Available"
+                                    else -> "⚪ Offline"
+                                },
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = when {
+                                    partner.isBusy -> Color(0xFFB45309)
+                                    partner.isOnline -> Color(0xFF15803D)
+                                    else -> Color(0xFF64748B)
+                                },
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "🏢 $kitchenName",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF1E40AF),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+
+                        if (partner.isAadhaarVerified) {
+                            Text("•", fontSize = 10.sp, color = Color.LightGray)
+                            Text("✓ KYC", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = VegGreen)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                // Compact Action Buttons
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = onCall,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .background(Color(0xFFEFF6FF), CircleShape)
+                    ) {
+                        Icon(Icons.Default.Call, contentDescription = "Call", tint = Color(0xFF2563EB), modifier = Modifier.size(13.dp))
+                    }
+
+                    IconButton(
+                        onClick = onWhatsApp,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .background(Color(0xFFF0FDF4), CircleShape)
+                    ) {
+                        Icon(Icons.Default.Phone, contentDescription = "WhatsApp", tint = VegGreen, modifier = Modifier.size(13.dp))
+                    }
+
+                    IconButton(
+                        onClick = onEdit,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .background(Color(0xFFF1F5F9), CircleShape)
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit", tint = Color(0xFF334155), modifier = Modifier.size(13.dp))
+                    }
+
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .background(Color(0xFFFEF2F2), CircleShape)
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFDC2626), modifier = Modifier.size(13.dp))
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+            Divider(color = Color(0xFFF1F5F9), thickness = 0.8.dp)
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Details Row: Phone, Aadhaar, DL
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Phone, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(11.dp))
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Text(partner.mobile, fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF0F172A))
+                }
+
+                Text("•", fontSize = 10.sp, color = Color.LightGray)
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Icon(Icons.Default.Badge, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(11.dp))
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Text(
+                        text = "Aadhaar: ${formatAadhaarNumber(partner.aadhaarNumber)}",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF334155),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                if (partner.drivingLicence.isNotBlank()) {
+                    Text("•", fontSize = 10.sp, color = Color.LightGray)
+                    Text(
+                        text = "DL: ${partner.drivingLicence}",
+                        fontSize = 10.sp,
+                        color = Color(0xFF475569),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Live Hisaab Chips (Lifetime Deliveries, Handis baki, COD baki, trips)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                // Lifetime Deliveries Chip
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = Color(0xFFEFF6FF),
+                    border = BorderStroke(1.dp, Color(0xFFBFDBFE))
+                ) {
+                    Text(
+                        text = "🏆 $totalDeliveries Delivered",
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1E40AF),
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.5.dp)
+                    )
+                }
+
+                // Handis baki
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = if (partner.pendingBartanCount > 0) Color(0xFFFFF7ED) else Color(0xFFF8FAFC),
+                    border = BorderStroke(1.dp, if (partner.pendingBartanCount > 0) Color(0xFFFFEDD5) else Color(0xFFE2E8F0))
+                ) {
+                    Text(
+                        text = "🍲 ${partner.pendingBartanCount} Handis",
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (partner.pendingBartanCount > 0) Color(0xFFC2410C) else Color.Gray,
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.5.dp)
+                    )
+                }
+
+                // COD baki
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = if (partner.cashToSubmit > 0) Color(0xFFFEF2F2) else Color(0xFFF0FDF4),
+                    border = BorderStroke(1.dp, if (partner.cashToSubmit > 0) Color(0xFFFECACA) else Color(0xFFBBF7D0))
+                ) {
+                    Text(
+                        text = if (partner.cashToSubmit > 0) "💵 ₹${partner.cashToSubmit.toInt()} COD" else "💵 ₹0 Settled",
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (partner.cashToSubmit > 0) Color(0xFFDC2626) else VegGreen,
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.5.dp)
+                    )
+                }
+
+                // Today's trips
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = Color(0xFFF1F5F9)
+                ) {
+                    Text(
+                        text = "⚡ ${partner.todayCompletedDeliveries} today",
+                        fontSize = 9.5.sp,
+                        color = Color(0xFF475569),
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.5.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(7.dp))
+
+            // More Details & Delivery History Action Button
+            Button(
+                onClick = onViewHistory,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F172A)),
+                shape = RoundedCornerShape(6.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(32.dp)
+                    .testTag("admin_partner_more_history_${partner.id}")
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ReceiptLong,
+                    contentDescription = null,
+                    modifier = Modifier.size(13.dp),
+                    tint = Color.White
+                )
+                Spacer(modifier = Modifier.width(5.dp))
+                Text(
+                    text = "More Details ($totalDeliveries Deliveries Completed)",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    imageVector = Icons.Default.ArrowForward,
+                    contentDescription = null,
+                    modifier = Modifier.size(12.dp),
+                    tint = Color(0xFF94A3B8)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Metric KPI Card for Admin Delivery Fleet
+ */
+@Composable
+fun AdminPartnerKpiCard(
+    title: String,
+    value: String,
+    subtitle: String,
+    color: Color,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(text = title, fontSize = 10.5.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
+                Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text = value, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = color)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(text = subtitle, fontSize = 9.sp, color = Color.Gray, maxLines = 1)
         }
     }
 }

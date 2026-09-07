@@ -193,5 +193,55 @@ object NotificationHelper {
             e.printStackTrace()
         }
     }
+
+    /**
+     * 9:30 AM Alert for Kitchen regarding pending Degs/Bartans
+     */
+    fun show930AmBartanAlertForKitchen(
+        context: Context,
+        kitchenName: String,
+        pendingCount: Int,
+        detailSummary: String
+    ) {
+        val title = "⏰ 9:30 AM Deg/Bartan Alert: $pendingCount Return Pending!"
+        val message = "Kitchen: $kitchenName • Khana delivered containers are pending collection. Tap to track & coordinate with assigned delivery boys."
+        showSystemNotification(context, title, "$message\n\n$detailSummary", 930101)
+    }
+
+    /**
+     * 9:30 AM Alert for Delivery Boy who originally delivered the order
+     */
+    fun show930AmBartanAlertForDeliveryBoy(
+        context: Context,
+        deliveryBoyName: String,
+        customerName: String,
+        utensilDescription: String,
+        address: String,
+        catererName: String
+    ) {
+        val title = "🛵 9:30 AM Pickup Task: Collect Deg/Bartan"
+        val message = "$deliveryBoyName, please collect $utensilDescription from $customerName at $address and return to $catererName."
+        showSystemNotification(context, title, message, (930200 + System.currentTimeMillis() % 1000).toInt())
+    }
+
+    /**
+     * Manual Overdue Container Alert triggered by Kitchen to a specific delivery boy
+     */
+    fun showOverdueContainerReminderForDeliveryBoy(
+        context: Context,
+        deliveryBoyName: String,
+        customerName: String,
+        customerMobile: String,
+        customerAddress: String,
+        utensilDescription: String,
+        orderId: String,
+        catererName: String,
+        daysOverdue: Int
+    ) {
+        initNotificationChannels(context)
+        val title = "🚨 URGENT: Deg/Bartan Overdue ($daysOverdue Days Late)!"
+        val message = "Hey $deliveryBoyName, Order #$orderId containers ($utensilDescription) at $customerName ($customerMobile, $customerAddress) are OVERDUE. Please collect and return to $catererName immediately."
+        showSystemNotification(context, title, message, (930600 + Math.abs(orderId.hashCode() % 1000)))
+    }
 }
 

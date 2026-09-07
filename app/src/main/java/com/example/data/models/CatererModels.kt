@@ -60,7 +60,8 @@ data class CateringAddOn(
     val unit: String,
     val icon: String,
     val description: String,
-    val servesText: String
+    val servesText: String,
+    val isAvailable: Boolean = true
 )
 
 enum class KycStatus {
@@ -69,10 +70,10 @@ enum class KycStatus {
     REJECTED
 }
 
-enum class Language {
-    ENGLISH,
-    HINDI,
-    HINGLISH
+enum class Language(val displayName: String) {
+    ENGLISH("English"),
+    HINDI("हिंदी (Hindi)"),
+    HINGLISH("Hinglish (Mix)")
 }
 
 enum class DiscountType {
@@ -118,7 +119,9 @@ data class CatererEntity(
     val biryaniPersonsPerKg: Double = 6.67, // e.g. 1 Kg serves ~6.7 persons (10 persons = 1.5 Kg)
     val sweetPersonsPerKg: Double = 12.5,   // e.g. 1 Kg serves ~12.5 persons (10 persons = 0.8 Kg)
     val gravyPersonsPerKg: Double = 8.33,   // e.g. 1 Kg serves ~8.3 persons (10 persons = 1.2 Kg)
-    val rotiPersonsPerUnit: Double = 0.5    // 2 rotis per person
+    val rotiPersonsPerUnit: Double = 0.5,   // 2 rotis per person
+    // Caterer choice for Add-on services: अगर सिर्फ खाना बेचना है तो false
+    val offersAddonServices: Boolean = true
 )
 
 @Entity(tableName = "menu_items")
@@ -241,6 +244,7 @@ data class DeliveryBoyEntity(
     val name: String,
     val mobile: String,
     val aadhaarNumber: String,
+    val drivingLicence: String = "",
     val isAadhaarVerified: Boolean = true,
     val isOnline: Boolean = true,
     val isBusy: Boolean = false,
@@ -255,11 +259,19 @@ data class BartanRecordEntity(
     val orderId: String,
     val customerName: String,
     val customerMobile: String,
+    val customerAddress: String = "",
     val catererId: String,
+    val catererName: String = "",
     val itemsDescription: String,
     val deliveryDate: String,
+    val deliveryBoyId: String = "",
+    val deliveryBoyName: String = "",
+    val deliveryBoyMobile: String = "",
     val isCollected: Boolean = false,
-    val collectedDate: String = ""
+    val collectedDate: String = "",
+    val returnStatus: String = "PENDING", // PENDING, PICKUP_SCHEDULED, COLLECTED, RETURNED_TO_KITCHEN
+    val lastMorningAlertDate: String = "",
+    val morningAlertSent: Boolean = false
 )
 
 @Entity(tableName = "app_notifications")
@@ -340,7 +352,10 @@ data class KitchenSettingsConfig(
     val biryaniPersonsPerKg: Double = 6.67, // 1 Kg serves ~6.7 persons
     val sweetPersonsPerKg: Double = 12.5,   // 1 Kg serves ~12.5 persons
     val gravyPersonsPerKg: Double = 8.33,   // 1 Kg serves ~8.3 persons
-    val rotiPersonsPerUnit: Double = 0.5    // 2 rotis per person
+    val rotiPersonsPerUnit: Double = 0.5,   // 2 rotis per person
+
+    // Caterer choice: Offer event add-on services or pure food only
+    val offersAddonServices: Boolean = true
 )
 
 @Entity(tableName = "partner_reviews")

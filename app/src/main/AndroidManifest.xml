@@ -28,6 +28,24 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Deep Link for Browser & External Camera QR Scanning to Open Kitchen Online Menu -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="catererswale.app"
+                    android:pathPrefix="/menu" />
+                <data
+                    android:scheme="https"
+                    android:host="ais-pre-eqwyvpqmaxgfrpul7qeb65-24933968568.asia-southeast1.run.app"
+                    android:pathPrefix="/menu" />
+                <data
+                    android:scheme="catererswale"
+                    android:host="menu" />
+            </intent-filter>
         </activity>
 
         <provider

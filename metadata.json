@@ -1,6 +1,6 @@
 {
-  "name": "Remix Caterers Wale",
-  "description": "Caterers Wale Catering Marketplace - Customer, Partner Kitchen, Delivery Boy \u0026 Super Admin platform",
+  "name": "Caterers Wale",
+  "description": "Caterers Wale Catering Marketplace - Customer, Partner Kitchen, Delivery Boy & Super Admin platform",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

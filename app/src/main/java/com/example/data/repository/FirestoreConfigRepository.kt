@@ -110,6 +110,7 @@ class FirestoreConfigRepository(private val context: Context? = null) {
             "loyaltyEarnPointsPer100Rs" to config.loyaltyEarnPointsPer100Rs,
             "loyaltyPointRupeeValue" to config.loyaltyPointRupeeValue,
             "maxLoyaltyRedeemPercent" to config.maxLoyaltyRedeemPercent,
+            "offersAddonServices" to config.offersAddonServices,
             "lastUpdatedTimestamp" to System.currentTimeMillis()
         )
 
@@ -163,7 +164,8 @@ class FirestoreConfigRepository(private val context: Context? = null) {
                 isLoyaltyEnabled = data["isLoyaltyEnabled"] as? Boolean ?: true,
                 loyaltyEarnPointsPer100Rs = (data["loyaltyEarnPointsPer100Rs"] as? Number)?.toInt() ?: 2,
                 loyaltyPointRupeeValue = (data["loyaltyPointRupeeValue"] as? Number)?.toDouble() ?: 1.0,
-                maxLoyaltyRedeemPercent = (data["maxLoyaltyRedeemPercent"] as? Number)?.toInt() ?: 20
+                maxLoyaltyRedeemPercent = (data["maxLoyaltyRedeemPercent"] as? Number)?.toInt() ?: 20,
+                offersAddonServices = data["offersAddonServices"] as? Boolean ?: true
             )
         } catch (e: Exception) {
             Log.e(tag, "Error parsing Firestore document: ${e.message}")

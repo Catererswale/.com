@@ -1,5 +1,6 @@
 package com.example.ui.customer
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -415,20 +417,21 @@ fun PaymentScreen(
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("Select Payment Option", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text("Select 50% Advance Online Payment Mode", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
+                Text("Catering date lock aur rashan booking ke liye 50% advance anivarya hai.", fontSize = 11.5.sp, color = Color.Gray)
                 Spacer(modifier = Modifier.height(10.dp))
             }
 
             item {
                 PaymentMethodOption(
-                    title = "UPI (Google Pay, PhonePe, Paytm)",
+                    title = "UPI (Google Pay, PhonePe, Paytm, BHIM)",
                     icon = Icons.Default.Smartphone,
                     method = PaymentMethod.UPI,
                     selected = selectedMethod,
                     onSelect = { selectedMethod = PaymentMethod.UPI }
                 )
                 PaymentMethodOption(
-                    title = "Dynamic QR Code Scanner",
+                    title = "Dynamic UPI QR Code (Instant Scan & Pay)",
                     icon = Icons.Default.QrCodeScanner,
                     method = PaymentMethod.DYNAMIC_QR,
                     selected = selectedMethod,
@@ -442,19 +445,88 @@ fun PaymentScreen(
                     onSelect = { selectedMethod = PaymentMethod.CARD }
                 )
                 PaymentMethodOption(
-                    title = "Net Banking / Corporate Wallet",
+                    title = "Net Banking / Corporate Netbanking",
                     icon = Icons.Default.Money,
                     method = PaymentMethod.NET_BANKING,
                     selected = selectedMethod,
                     onSelect = { selectedMethod = PaymentMethod.NET_BANKING }
                 )
-                PaymentMethodOption(
-                    title = "Cash Balance on Delivery",
-                    icon = Icons.Default.Money,
-                    method = PaymentMethod.CASH_ON_DELIVERY,
-                    selected = selectedMethod,
-                    onSelect = { selectedMethod = PaymentMethod.CASH_ON_DELIVERY }
-                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Remaining 50% Balance on Delivery Information Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color(0xFFBBF7D0))
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = CircleShape,
+                                color = Color(0xFFDCFCE7),
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = VegGreen, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    "Baki 50% Balance (₹${balancePay.toInt()}) Delivery Par Dijiye",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF166534)
+                                )
+                                Text(
+                                    "Khana deliver hone par delivery boy ko cash ya UPI se payment karein",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF15803D)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color.White,
+                                border = BorderStroke(1.dp, Color(0xFF86EFAC)),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Money, contentDescription = null, tint = Color(0xFF15803D), modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Cash On Delivery (₹${balancePay.toInt()})", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF15803D))
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color.White,
+                                border = BorderStroke(1.dp, Color(0xFF86EFAC)),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.QrCodeScanner, contentDescription = null, tint = Color(0xFF15803D), modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("UPI on Delivery (₹${balancePay.toInt()})", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF15803D))
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 

@@ -30,6 +30,7 @@ import com.example.data.repository.SettlementRepository
 import com.example.data.service.SettlementEngineService
 import com.example.util.NotificationHelper
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -85,6 +86,12 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
                 }
             }
         }
+
+        // Automatic 9:30 AM Morning Deg/Bartan Return Check & Alert Dispatch
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(1500)
+            repository.trigger930AmBartanMorningAlert(getApplication())
+        }
     }
 
     // Active Role State
@@ -118,6 +125,21 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
     // Selected Caterer for Detail View
     private val _selectedCatererId = MutableStateFlow<String?>("caterer_1")
     val selectedCatererId: StateFlow<String?> = _selectedCatererId.asStateFlow()
+
+    // Deep Link / Standee QR Auto-Navigation (Browser & Camera scan)
+    private val _deepLinkedCatererId = MutableStateFlow<String?>(null)
+    val deepLinkedCatererId: StateFlow<String?> = _deepLinkedCatererId.asStateFlow()
+
+    fun setDeepLinkedCatererId(catererId: String?) {
+        _deepLinkedCatererId.value = catererId
+        if (!catererId.isNullOrBlank()) {
+            _selectedCatererId.value = catererId
+        }
+    }
+
+    fun clearDeepLinkedCatererId() {
+        _deepLinkedCatererId.value = null
+    }
 
     // Partner Reviews StateFlow
     val allPartnerReviews: StateFlow<List<PartnerReviewEntity>> = repository.allReviews
@@ -310,6 +332,79 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    private val _customAddonServices = MutableStateFlow(
+        listOf(
+            CateringAddOn(
+                id = "biryani_server",
+                name = "Biryani Serving Staff",
+                hindiName = "बिरयानी निकालने वाला कारीगर / हेल्पर",
+                price = 600.0,
+                unit = "1 Staff",
+                icon = "🧑‍🍳",
+                description = "Uniform-clad skilled helper to portion degh biryani cleanly without mess or wastage.",
+                servesText = "Per 50-100 guests",
+                isAvailable = true
+            ),
+            CateringAddOn(
+                id = "kachumar_salan",
+                name = "Extra Kachumar, Raita & Salan",
+                hindiName = "एक्स्ट्रा कचूमर, रायता व सालन किट",
+                price = 150.0,
+                unit = "Large Set",
+                icon = "🥗",
+                description = "Sliced onion salad with lemon & green chili, fresh mint boondi raita & rich dawat mirchi ka salan.",
+                servesText = "Serves 25-30 guests",
+                isAvailable = true
+            ),
+            CateringAddOn(
+                id = "disposable_plates",
+                name = "Disposable Plates, Spoons & Tissue",
+                hindiName = "डिस्पोजेबल प्लेट्स, चम्मच व टिशू सेट",
+                price = 250.0,
+                unit = "Pack of 30",
+                icon = "🍽️",
+                description = "Heavy 3-compartment partitioned plates, wrapped wooden spoons, 2-ply soft napkins & toothpicks.",
+                servesText = "Pack of 30 plates",
+                isAvailable = true
+            ),
+            CateringAddOn(
+                id = "mukhwas_kit",
+                name = "Shahi Mukhwas & Saunf Mishri Kit",
+                hindiName = "शाही सौंफ, मिश्री व मुखवास किट",
+                price = 99.0,
+                unit = "Pack of 50",
+                icon = "🍬",
+                description = "Silver coated cardamom, roasted sweet saunf, rock sugar crystals and refreshing lemon wet wipes.",
+                servesText = "Pack for 50 guests",
+                isAvailable = true
+            )
+        )
+    )
+    val customAddonServices: StateFlow<List<CateringAddOn>> = _customAddonServices.asStateFlow()
+
+    fun updateAddonService(addOn: CateringAddOn) {
+        _customAddonServices.value = _customAddonServices.value.map {
+            if (it.id == addOn.id) addOn else it
+        }
+        showFeedback("✅ Add-on updated: ${addOn.name} (₹${addOn.price.toInt()} • ${addOn.servesText})")
+    }
+
+    fun addCustomAddonService(addOn: CateringAddOn) {
+        _customAddonServices.value = _customAddonServices.value + addOn
+        showFeedback("✅ Added new Add-on: ${addOn.name}")
+    }
+
+    fun deleteAddonService(addOnId: String) {
+        _customAddonServices.value = _customAddonServices.value.filter { it.id != addOnId }
+        showFeedback("Add-on service removed")
+    }
+
+    fun toggleAddonAvailability(addOnId: String, isAvailable: Boolean) {
+        _customAddonServices.value = _customAddonServices.value.map {
+            if (it.id == addOnId) it.copy(isAvailable = isAvailable) else it
+        }
+    }
+
     fun addAddOnService(addOn: CateringAddOn, quantity: Double) {
         viewModelScope.launch {
             val firstItem = cartItemsList.value.firstOrNull()
@@ -324,7 +419,11 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
                 qty = quantity,
                 foodType = FoodType.VEG
             )
-            showFeedback("Added ${addOn.name} to Cart ✨")
+            if (quantity > 1.0) {
+                showFeedback("${addOn.name}: ${quantity.toInt()} Units ✨")
+            } else {
+                showFeedback("Added ${addOn.name} to Cart ✨")
+            }
         }
     }
 
@@ -360,6 +459,7 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
         redeemedLoyaltyPoints: Int = 0,
         earnedLoyaltyPoints: Int = 0,
         isOfflineBooking: Boolean = false,
+        customAdvanceAmount: Double? = null,
         onSuccess: (String) -> Unit
     ) {
         viewModelScope.launch {
@@ -380,7 +480,8 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
                 loyaltyDiscountAmount = loyaltyDiscountAmount,
                 redeemedLoyaltyPoints = redeemedLoyaltyPoints,
                 earnedLoyaltyPoints = earnedLoyaltyPoints,
-                isOfflineBooking = isOfflineBooking
+                isOfflineBooking = isOfflineBooking,
+                customAdvanceAmount = customAdvanceAmount
             )
             _activeTrackingOrderId.value = orderId
 
@@ -503,7 +604,21 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
     fun addDeliveryBoy(boy: DeliveryBoyEntity) {
         viewModelScope.launch {
             repository.addDeliveryBoy(boy)
-            showFeedback("Delivery Boy ${boy.name} registered")
+            showFeedback("Delivery Boy '${boy.name}' registered successfully! ✅")
+        }
+    }
+
+    fun updateDeliveryBoy(boy: DeliveryBoyEntity) {
+        viewModelScope.launch {
+            repository.updateDeliveryBoy(boy)
+            showFeedback("Delivery Boy '${boy.name}' details updated! ✏️")
+        }
+    }
+
+    fun deleteDeliveryBoy(boyId: String, kitchenId: String, boyName: String) {
+        viewModelScope.launch {
+            repository.deleteDeliveryBoy(boyId, kitchenId)
+            showFeedback("Delivery Boy '$boyName' removed from kitchen fleet! 🗑️")
         }
     }
 
@@ -511,6 +626,80 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             repository.updateBartanCollected(id, true, date)
             showFeedback("Bartan marked as collected ✅")
+        }
+    }
+
+    fun markBartanStatus(id: String, status: String, date: String = "2026-07-25") {
+        viewModelScope.launch {
+            val isCollected = (status == "COLLECTED" || status == "RETURNED_TO_KITCHEN")
+            repository.updateBartanCollectedWithStatus(id, isCollected, date, status)
+            showFeedback("Bartan return status updated: $status ✅")
+        }
+    }
+
+    fun trigger930AmMorningAlert(showToast: Boolean = true) {
+        viewModelScope.launch {
+            val count = repository.trigger930AmBartanMorningAlert(getApplication())
+            if (showToast) {
+                if (count > 0) {
+                    showFeedback("⏰ 9:30 AM Alert Sent! $count pending container(s) notified to respective Kitchens & Delivery Boys.")
+                } else {
+                    showFeedback("All containers have been returned! No pending 9:30 AM returns.")
+                }
+            }
+        }
+    }
+
+    fun sendManualContainerReminderToDeliveryBoy(
+        bartanRecordId: String?,
+        orderId: String,
+        deliveryBoyId: String,
+        deliveryBoyName: String,
+        deliveryBoyMobile: String,
+        customerName: String,
+        customerMobile: String,
+        customerAddress: String,
+        containerDescription: String,
+        catererName: String = "A1 Huma Caterers",
+        daysOverdue: Int = 1,
+        onComplete: (() -> Unit)? = null
+    ) {
+        viewModelScope.launch {
+            repository.sendManualContainerReminderToDeliveryBoy(
+                bartanRecordId = bartanRecordId,
+                orderId = orderId,
+                deliveryBoyId = deliveryBoyId,
+                deliveryBoyName = deliveryBoyName,
+                deliveryBoyMobile = deliveryBoyMobile,
+                customerName = customerName,
+                customerMobile = customerMobile,
+                customerAddress = customerAddress,
+                containerDescription = containerDescription,
+                catererName = catererName,
+                daysOverdue = daysOverdue,
+                context = getApplication()
+            )
+            val boyName = deliveryBoyName.ifBlank { "Delivery Boy" }
+            showFeedback("🔔 Overdue reminder notification sent to $boyName for Order #$orderId!")
+            onComplete?.invoke()
+        }
+    }
+
+    fun getBartansForDeliveryBoy(deliveryBoyId: String): Flow<List<com.example.data.models.BartanRecordEntity>> {
+        return repository.getBartanRecordsByDeliveryBoy(deliveryBoyId)
+    }
+
+    fun markCashReceivedByKitchen(orderId: String) {
+        viewModelScope.launch {
+            repository.markCashReceivedByKitchen(orderId, getApplication())
+            showFeedback("Cash Received & Settled for Order #$orderId ✅")
+        }
+    }
+
+    fun deliveryBoyNotifyCashHandover(orderId: String) {
+        viewModelScope.launch {
+            repository.deliveryBoyNotifyCashHandover(orderId, getApplication())
+            showFeedback("Cash Handover Notification sent to Kitchen Cashier 🔔")
         }
     }
 
@@ -682,7 +871,8 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
                     biryaniPersonsPerKg = newConfig.biryaniPersonsPerKg,
                     sweetPersonsPerKg = newConfig.sweetPersonsPerKg,
                     gravyPersonsPerKg = newConfig.gravyPersonsPerKg,
-                    rotiPersonsPerUnit = newConfig.rotiPersonsPerUnit
+                    rotiPersonsPerUnit = newConfig.rotiPersonsPerUnit,
+                    offersAddonServices = newConfig.offersAddonServices
                 )
                 repository.updateCatererDetails(updated)
             }

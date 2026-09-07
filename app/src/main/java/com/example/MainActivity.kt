@@ -1,5 +1,7 @@
 package com.example
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import com.example.data.models.PaymentMethod
 import com.example.data.models.UserRole
 import com.example.data.repository.CaterersViewModel
@@ -33,9 +37,11 @@ import com.example.ui.customer.AddressScreen
 import com.example.ui.customer.CartScreen
 import com.example.ui.customer.CatererDetailScreen
 import com.example.ui.customer.CustomerHomeScreen
+import com.example.ui.customer.CustomerOrdersScreen
 import com.example.ui.customer.CustomerProfileScreen
 import com.example.ui.customer.DeliveredScreen
 import com.example.ui.customer.DeliveryScheduleScreen
+import com.example.ui.customer.CustomerOrderSummaryScreen
 import com.example.ui.customer.FeedbackAndRatingScreen
 import com.example.ui.customer.HelpSupportScreen
 import com.example.ui.customer.LiveTrackingScreen
@@ -51,11 +57,13 @@ enum class CustomerScreen {
     CART,
     DELIVERY_SCHEDULE,
     ADDRESS,
+    ORDER_SUMMARY,
     PAYMENT,
     ORDER_CONFIRMATION,
     LIVE_TRACKING,
     DELIVERED,
     FEEDBACK_RATING,
+    ORDERS,
     PROFILE,
     HELP_SUPPORT
 }
@@ -67,11 +75,28 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        handleDeepLink(intent)
 
         setContent {
             MyApplicationTheme {
                 CaterersWaleApp(viewModel = viewModel)
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleDeepLink(intent)
+    }
+
+    private fun handleDeepLink(intent: Intent?) {
+        val uri: Uri = intent?.data ?: return
+        val kitchen = uri.getQueryParameter("kitchen")
+            ?: uri.getQueryParameter("kitchenId")
+            ?: uri.getQueryParameter("caterer")
+            ?: if (uri.pathSegments.contains("menu") && uri.lastPathSegment != "menu") uri.lastPathSegment else null
+        if (!kitchen.isNullOrBlank()) {
+            viewModel.setDeepLinkedCatererId(kitchen)
         }
     }
 }
@@ -85,9 +110,23 @@ fun CaterersWaleApp(viewModel: CaterersViewModel) {
     val isLoggedIn by viewModel.isLoggedIn.collectAsState()
     val currentUser by viewModel.currentUser.collectAsState()
 
+    // Deep Link Trigger (Browser/Camera Scan)
+    val deepLinkedCatererId by viewModel.deepLinkedCatererId.collectAsState()
+
     // Customer Navigation States
     var customerScreen by remember { mutableStateOf(CustomerScreen.HOME) }
     var selectedCatererId by remember { mutableStateOf("caterer_1") }
+
+    LaunchedEffect(deepLinkedCatererId) {
+        val target = deepLinkedCatererId
+        if (!target.isNullOrBlank()) {
+            selectedCatererId = target
+            viewModel.switchRole(UserRole.CUSTOMER)
+            customerScreen = CustomerScreen.CATERER_DETAIL
+            viewModel.showFeedback("⚡ Opening Live Kitchen Menu...")
+            viewModel.clearDeepLinkedCatererId()
+        }
+    }
     var is30PercentAdvance by remember { mutableStateOf(true) }
     var isExclusiveStoreMode by remember { mutableStateOf(false) }
     var isPartnerPreviewMode by remember { mutableStateOf(false) }
@@ -141,7 +180,7 @@ fun CaterersWaleApp(viewModel: CaterersViewModel) {
                                         customerScreen = CustomerScreen.CATERER_DETAIL
                                     },
                                     onOpenCart = { customerScreen = CustomerScreen.CART },
-                                    onOpenOrders = { customerScreen = CustomerScreen.PROFILE },
+                                    onOpenOrders = { customerScreen = CustomerScreen.ORDERS },
                                     onOpenProfile = { customerScreen = CustomerScreen.PROFILE },
                                     onOpenSupport = { customerScreen = CustomerScreen.HELP_SUPPORT },
                                     onTrackOrder = { orderId ->
@@ -218,8 +257,24 @@ fun CaterersWaleApp(viewModel: CaterersViewModel) {
                                         selectedAddress = addr
                                         customerPhone = phone
                                         alternatePhone = altPhone
-                                        customerScreen = CustomerScreen.PAYMENT
+                                        customerScreen = CustomerScreen.ORDER_SUMMARY
                                     }
+                                )
+                            }
+
+                            CustomerScreen.ORDER_SUMMARY -> {
+                                val cartItems = viewModel.cartItemsList.value
+                                val catererName = cartItems.firstOrNull()?.catererName ?: "A1 Huma Caterers"
+                                CustomerOrderSummaryScreen(
+                                    catererName = catererName,
+                                    items = cartItems,
+                                    totalAmount = cartTotalAmount,
+                                    deliveryAddress = selectedAddress,
+                                    deliveryDate = selectedDate,
+                                    deliveryTimeSlot = selectedTimeSlot,
+                                    customerPhone = customerPhone,
+                                    onBack = { customerScreen = CustomerScreen.ADDRESS },
+                                    onProceedToPayment = { customerScreen = CustomerScreen.PAYMENT }
                                 )
                             }
 
@@ -231,7 +286,7 @@ fun CaterersWaleApp(viewModel: CaterersViewModel) {
                                     customerPhone = customerPhone,
                                     deliveryDate = selectedDate,
                                     deliveryTimeSlot = selectedTimeSlot,
-                                    onBack = { customerScreen = CustomerScreen.ADDRESS },
+                                    onBack = { customerScreen = CustomerScreen.ORDER_SUMMARY },
                                     onConfirmPayment = { method ->
                                         val cartItems = viewModel.cartItemsList.value
                                         val itemsSummary = cartItems.joinToString(", ") { "${it.name} (${it.quantity} ${it.unitType.name})" }
@@ -277,7 +332,7 @@ fun CaterersWaleApp(viewModel: CaterersViewModel) {
                                 LiveTrackingScreen(
                                     orderId = confirmedOrderId,
                                     viewModel = viewModel,
-                                    onBack = { customerScreen = CustomerScreen.HOME },
+                                    onBack = { customerScreen = CustomerScreen.ORDERS },
                                     onOpenDeliveredView = { customerScreen = CustomerScreen.DELIVERED }
                                 )
                             }
@@ -287,7 +342,7 @@ fun CaterersWaleApp(viewModel: CaterersViewModel) {
                                 DeliveredScreen(
                                     order = currentOrder,
                                     viewModel = viewModel,
-                                    onBackToHome = { customerScreen = CustomerScreen.HOME },
+                                    onBackToHome = { customerScreen = CustomerScreen.ORDERS },
                                     onOpenFeedbackScreen = { orderId ->
                                         confirmedOrderId = orderId
                                         customerScreen = CustomerScreen.FEEDBACK_RATING
@@ -300,8 +355,23 @@ fun CaterersWaleApp(viewModel: CaterersViewModel) {
                                     orderId = confirmedOrderId,
                                     catererId = selectedCatererId,
                                     viewModel = viewModel,
+                                    onBack = { customerScreen = CustomerScreen.ORDERS },
+                                    onNavigateToHome = { customerScreen = CustomerScreen.ORDERS }
+                                )
+                            }
+
+                            CustomerScreen.ORDERS -> {
+                                CustomerOrdersScreen(
+                                    viewModel = viewModel,
                                     onBack = { customerScreen = CustomerScreen.HOME },
-                                    onNavigateToHome = { customerScreen = CustomerScreen.HOME }
+                                    onTrackOrder = { orderId ->
+                                        confirmedOrderId = orderId
+                                        customerScreen = CustomerScreen.LIVE_TRACKING
+                                    },
+                                    onRateKitchen = { orderId ->
+                                        confirmedOrderId = orderId
+                                        customerScreen = CustomerScreen.FEEDBACK_RATING
+                                    }
                                 )
                             }
 
@@ -310,6 +380,7 @@ fun CaterersWaleApp(viewModel: CaterersViewModel) {
                                     viewModel = viewModel,
                                     onBack = { customerScreen = CustomerScreen.HOME },
                                     onOpenSupport = { customerScreen = CustomerScreen.HELP_SUPPORT },
+                                    onOpenOrders = { customerScreen = CustomerScreen.ORDERS },
                                     onTrackOrder = { orderId ->
                                         confirmedOrderId = orderId
                                         customerScreen = CustomerScreen.LIVE_TRACKING
@@ -356,7 +427,10 @@ fun CaterersWaleApp(viewModel: CaterersViewModel) {
         // Global Notification / Toast Feedback
             NotificationFeedbackToast(
                 message = feedbackMessage,
-                onDismiss = { viewModel.clearFeedback() }
+                onDismiss = { viewModel.clearFeedback() },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 20.dp)
             )
         }
     }

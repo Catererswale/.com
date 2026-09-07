@@ -100,6 +100,12 @@ interface CaterersDao {
     @Query("UPDATE orders SET isBartanReturned = :isReturned WHERE orderId = :orderId")
     suspend fun updateBartanStatus(orderId: String, isReturned: Boolean)
 
+    @Query("UPDATE orders SET isCashSubmittedToKitchen = :submitted, paymentStatus = :paymentStatus WHERE orderId = :orderId")
+    suspend fun updateOrderCashSubmitted(orderId: String, submitted: Boolean, paymentStatus: PaymentStatus = PaymentStatus.FULLY_SETTLED)
+
+    @Query("UPDATE orders SET cashCollectedByDeliveryBoy = :cashAmount, isCashSubmittedToKitchen = :submitted WHERE orderId = :orderId")
+    suspend fun updateOrderCashCollected(orderId: String, cashAmount: Double, submitted: Boolean)
+
     // Delivery Boys
     @Query("SELECT * FROM delivery_boys")
     fun getAllDeliveryBoys(): Flow<List<DeliveryBoyEntity>>
@@ -109,6 +115,12 @@ interface CaterersDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDeliveryBoy(boy: DeliveryBoyEntity)
+
+    @Update
+    suspend fun updateDeliveryBoy(boy: DeliveryBoyEntity)
+
+    @Query("DELETE FROM delivery_boys WHERE id = :boyId AND kitchenId = :kitchenId")
+    suspend fun deleteDeliveryBoy(boyId: String, kitchenId: String)
 
     @Query("UPDATE delivery_boys SET isOnline = :isOnline WHERE id = :boyId")
     suspend fun updateDeliveryBoyOnlineStatus(boyId: String, isOnline: Boolean)
@@ -120,11 +132,23 @@ interface CaterersDao {
     @Query("SELECT * FROM bartan_records WHERE catererId = :catererId ORDER BY id DESC")
     fun getBartanRecordsByCaterer(catererId: String): Flow<List<BartanRecordEntity>>
 
+    @Query("SELECT * FROM bartan_records WHERE deliveryBoyId = :deliveryBoyId ORDER BY id DESC")
+    fun getBartanRecordsByDeliveryBoy(deliveryBoyId: String): Flow<List<BartanRecordEntity>>
+
+    @Query("SELECT * FROM bartan_records WHERE isCollected = 0")
+    suspend fun getPendingBartanRecordsList(): List<BartanRecordEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertBartanRecord(record: BartanRecordEntity)
 
     @Query("UPDATE bartan_records SET isCollected = :collected, collectedDate = :date WHERE id = :id")
     suspend fun updateBartanCollected(id: String, collected: Boolean, date: String)
+
+    @Query("UPDATE bartan_records SET isCollected = :collected, collectedDate = :date, returnStatus = :status WHERE id = :id")
+    suspend fun updateBartanCollectedFull(id: String, collected: Boolean, date: String, status: String)
+
+    @Query("UPDATE bartan_records SET morningAlertSent = :alertSent, lastMorningAlertDate = :alertDate WHERE id = :id")
+    suspend fun updateBartanMorningAlert(id: String, alertSent: Boolean, alertDate: String)
 
     // Notifications
     @Query("SELECT * FROM app_notifications ORDER BY timestamp DESC")

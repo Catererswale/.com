@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -47,6 +48,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -82,8 +85,13 @@ fun CartScreen(
 ) {
     val cartItems by viewModel.cartItemsList.collectAsState()
     val settings by viewModel.kitchenSettings.collectAsState()
+    val caterers by viewModel.caterersList.collectAsState()
     val userPoints by viewModel.userLoyaltyPoints.collectAsState()
     val appliedPromo by viewModel.appliedAdminPromoCode.collectAsState()
+
+    val cartCatererId = cartItems.firstOrNull { !it.id.startsWith("cart_addon_") }?.catererId
+    val activeCaterer = caterers.find { it.id == cartCatererId }
+    val isAddonEnabled = activeCaterer?.offersAddonServices ?: settings.offersAddonServices
 
     var is50PercentAdvance by remember { mutableStateOf(true) }
     var promoInput by remember { mutableStateOf("") }
@@ -118,51 +126,9 @@ fun CartScreen(
         mutableStateOf(availableSlots.firstOrNull() ?: configuredSlots.first())
     }
 
-    // Catering Add-on Services (Biryani Server, Kachumar Salan, Disposable Plates, Shahi Mukhwas)
-    val standardAddOns = remember {
-        listOf(
-            CateringAddOn(
-                id = "biryani_server",
-                name = "Biryani Serving Staff",
-                hindiName = "बिरयानी निकालने वाला कारीगर / हेल्पर",
-                price = 600.0,
-                unit = "1 Staff",
-                icon = "🧑‍🍳",
-                description = "Uniform-clad skilled helper to portion degh biryani cleanly without mess or wastage.",
-                servesText = "Per 50-100 guests"
-            ),
-            CateringAddOn(
-                id = "kachumar_salan",
-                name = "Extra Kachumar, Raita & Salan",
-                hindiName = "एक्स्ट्रा कचूमर, रायता व सालन किट",
-                price = 150.0,
-                unit = "Large Set",
-                icon = "🥗",
-                description = "Sliced onion salad with lemon & green chili, fresh mint boondi raita & rich dawat mirchi ka salan.",
-                servesText = "Serves 25-30 guests"
-            ),
-            CateringAddOn(
-                id = "disposable_plates",
-                name = "Disposable Plates, Spoons & Tissue",
-                hindiName = "डिस्पोजेबल प्लेट्स, चम्मच व टिशू सेट",
-                price = 250.0,
-                unit = "Pack of 30",
-                icon = "🍽️",
-                description = "Heavy 3-compartment partitioned plates, wrapped wooden spoons, 2-ply soft napkins & toothpicks.",
-                servesText = "Pack for 30 guests"
-            ),
-            CateringAddOn(
-                id = "mukhwas_kit",
-                name = "Shahi Mukhwas & Saunf Mishri Kit",
-                hindiName = "शाही सौंफ, मिश्री व मुखवास किट",
-                price = 99.0,
-                unit = "Pack of 50",
-                icon = "🍬",
-                description = "Silver coated cardamom, roasted sweet saunf, rock sugar crystals and refreshing lemon wet wipes.",
-                servesText = "Set for 50 guests"
-            )
-        )
-    }
+    // Catering Add-on Services (Configured by Caterer Partner)
+    val configuredAddOns by viewModel.customAddonServices.collectAsState()
+    val availableAddOns = configuredAddOns.filter { it.isAvailable }
 
     // Item Level Calculation
     val rawItemsSubtotal = cartItems.sumOf { it.originalPricePerUnit * it.quantity }
@@ -272,6 +238,9 @@ fun CartScreen(
                     }
                 }
             } else {
+                val foodCartItems = remember(cartItems) { cartItems.filter { !it.id.startsWith("cart_addon_") } }
+                val addonCartItems = remember(cartItems) { cartItems.filter { it.id.startsWith("cart_addon_") } }
+
                 LazyColumn(
                     modifier = Modifier
                         .weight(1f)
@@ -310,155 +279,323 @@ fun CartScreen(
                         }
                     }
 
-                    item {
-                        Text(
-                            text = "Selected Catering Dishes",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF212121),
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
+                    if (foodCartItems.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "Selected Catering Dishes",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF212121),
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                        }
+
+                        items(foodCartItems, key = { it.id }) { item ->
+                            CartItemRow(
+                                item = item,
+                                onRemove = { viewModel.removeCartItem(item.id) }
+                            )
+                        }
                     }
 
-                    items(cartItems) { item ->
-                        CartItemRow(
-                            item = item,
-                            onRemove = { viewModel.removeCartItem(item.id) }
-                        )
-                    }
-
-                    // --- ADD-ON SERVICES SECTION ---
-                    item {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBEB)),
-                            shape = RoundedCornerShape(16.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, AmberSecondary.copy(alpha = 0.6f))
-                        ) {
-                            Column(modifier = Modifier.padding(14.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("✨", fontSize = 18.sp)
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Column {
+                    // --- ADD-ON SERVICES SECTION (Slider in horizontal scroll - Compact: 2-3 visible at once) ---
+                    if (isAddonEnabled && availableAddOns.isNotEmpty()) {
+                        item {
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBEB)),
+                                shape = RoundedCornerShape(16.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, AmberSecondary.copy(alpha = 0.6f))
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text("✨", fontSize = 16.sp)
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Column {
+                                                Text(
+                                                    "Catering Add-on Services (दावत सुविधाएं)",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 13.5.sp,
+                                                    color = Color(0xFF78350F)
+                                                )
+                                                Text(
+                                                    "Staff, serving utensils & plate packages",
+                                                    fontSize = 10.5.sp,
+                                                    color = Color(0xFF92400E)
+                                                )
+                                            }
+                                        }
+                                        Surface(
+                                            color = AmberSecondary.copy(alpha = 0.25f),
+                                            shape = RoundedCornerShape(12.dp)
+                                        ) {
                                             Text(
-                                                "Catering Add-on Services (दावत सुविधाएं)",
+                                                "Swipe ➡️",
+                                                fontSize = 9.5.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                fontSize = 14.5.sp,
-                                                color = Color(0xFF78350F)
-                                            )
-                                            Text(
-                                                "Biryani server helper, extra kachumar/raita & disposables",
-                                                fontSize = 11.sp,
-                                                color = Color(0xFF92400E)
+                                                color = Color(0xFF78350F),
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                             )
                                         }
                                     }
-                                }
 
-                                Spacer(modifier = Modifier.height(10.dp))
+                                    Spacer(modifier = Modifier.height(10.dp))
 
-                                standardAddOns.forEach { addOn ->
-                                    val inCartItem = cartItems.find { it.menuItemId == addOn.id || it.id == "cart_addon_${addOn.id}" }
-                                    val isAdded = inCartItem != null
-                                    val currentQty = inCartItem?.quantity ?: 0.0
-
-                                    Surface(
-                                        color = Color.White,
-                                        shape = RoundedCornerShape(12.dp),
-                                        border = androidx.compose.foundation.BorderStroke(
-                                            1.dp,
-                                            if (isAdded) SaffronPrimary else Color(0xFFE2E8F0)
-                                        ),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 4.dp)
+                                    // HORIZONTAL SLIDER: Compact width (116.dp) so 2 to 3 services fit side-by-side on screen
+                                    LazyRow(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 2.dp)
                                     ) {
-                                        Row(
-                                            modifier = Modifier.padding(10.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                modifier = Modifier.weight(1f)
+                                        items(availableAddOns, key = { it.id }) { addOn ->
+                                            val inCartItem = cartItems.find { it.menuItemId == addOn.id || it.id == "cart_addon_${addOn.id}" }
+                                            val isAdded = inCartItem != null
+                                            val currentQty = inCartItem?.quantity ?: 0.0
+
+                                            Surface(
+                                                color = if (isAdded) Color(0xFFFFFBEB) else Color.White,
+                                                shape = RoundedCornerShape(12.dp),
+                                                border = androidx.compose.foundation.BorderStroke(
+                                                    if (isAdded) 1.5.dp else 1.dp,
+                                                    if (isAdded) SaffronPrimary else Color(0xFFFED7AA)
+                                                ),
+                                                shadowElevation = if (isAdded) 2.dp else 1.dp,
+                                                modifier = Modifier
+                                                    .width(116.dp)
+                                                    .testTag("addon_slider_card_${addOn.id}")
                                             ) {
-                                                Text(addOn.icon, fontSize = 24.sp)
-                                                Spacer(modifier = Modifier.width(10.dp))
-                                                Column {
+                                                Column(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(8.dp),
+                                                    horizontalAlignment = Alignment.CenterHorizontally
+                                                ) {
+                                                    // Top Icon & Price tag
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(34.dp)
+                                                            .background(
+                                                                if (isAdded) AmberSecondary.copy(alpha = 0.35f) else Color(0xFFFFF7ED),
+                                                                CircleShape
+                                                            ),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Text(addOn.icon, fontSize = 18.sp)
+                                                    }
+
+                                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                                    Text(
+                                                        text = "₹${addOn.price.toInt()}",
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        fontSize = 12.5.sp,
+                                                        color = Color(0xFF92400E)
+                                                    )
+
+                                                    Spacer(modifier = Modifier.height(2.dp))
+
+                                                    // Service Name & Hindi subtitle (Compact & truncated cleanly)
                                                     Text(
                                                         text = addOn.name,
                                                         fontWeight = FontWeight.Bold,
-                                                        fontSize = 13.sp,
-                                                        color = Color(0xFF1E293B)
+                                                        fontSize = 10.5.sp,
+                                                        color = Color(0xFF1E293B),
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        textAlign = TextAlign.Center
                                                     )
                                                     Text(
                                                         text = addOn.hindiName,
-                                                        fontSize = 11.sp,
+                                                        fontSize = 9.sp,
                                                         color = Color(0xFFB45309),
-                                                        fontWeight = FontWeight.SemiBold
+                                                        fontWeight = FontWeight.Medium,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        textAlign = TextAlign.Center
                                                     )
-                                                    Text(
-                                                        text = "${addOn.servesText} • ₹${addOn.price.toInt()}",
-                                                        fontSize = 11.sp,
-                                                        color = Color.Gray
-                                                    )
-                                                }
-                                            }
 
-                                            if (!isAdded) {
-                                                Button(
-                                                    onClick = { viewModel.addAddOnService(addOn, 1.0) },
-                                                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
-                                                    shape = RoundedCornerShape(8.dp),
-                                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
-                                                    modifier = Modifier
-                                                        .height(32.dp)
-                                                        .testTag("add_addon_${addOn.id}")
-                                                ) {
-                                                    Text("+ Add", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
-                                                }
-                                            } else {
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    modifier = Modifier
-                                                        .background(Color(0xFFFFF7ED), RoundedCornerShape(8.dp))
-                                                        .border(1.dp, SaffronPrimary, RoundedCornerShape(8.dp))
-                                                        .padding(horizontal = 4.dp, vertical = 2.dp)
-                                                ) {
-                                                    IconButton(
-                                                        onClick = {
-                                                            if (currentQty > 1.0) {
-                                                                viewModel.addAddOnService(addOn, currentQty - 1.0)
-                                                            } else {
-                                                                viewModel.removeAddOnService(addOn.id)
-                                                            }
-                                                        },
-                                                        modifier = Modifier.size(26.dp)
+                                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                                    // Plate / Package Quantity Badge
+                                                    Surface(
+                                                        color = Color(0xFFF1F5F9),
+                                                        shape = RoundedCornerShape(4.dp),
+                                                        modifier = Modifier.fillMaxWidth()
                                                     ) {
-                                                        Text("–", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = SaffronPrimary)
+                                                        Text(
+                                                            text = addOn.servesText,
+                                                            fontSize = 8.5.sp,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            color = Color(0xFF475569),
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis,
+                                                            textAlign = TextAlign.Center,
+                                                            modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp)
+                                                        )
                                                     }
-                                                    Text(
-                                                        text = currentQty.toInt().toString(),
-                                                        fontWeight = FontWeight.Bold,
-                                                        fontSize = 13.sp,
-                                                        color = Color.Black,
-                                                        modifier = Modifier.padding(horizontal = 6.dp)
-                                                    )
-                                                    IconButton(
-                                                        onClick = { viewModel.addAddOnService(addOn, currentQty + 1.0) },
-                                                        modifier = Modifier.size(26.dp)
-                                                    ) {
-                                                        Text("+", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = SaffronPrimary)
+
+                                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                                    // Bottom Action: Remains sticky with instant Stepper [–] Qty [+]
+                                                    if (!isAdded) {
+                                                        Button(
+                                                            onClick = { viewModel.addAddOnService(addOn, 1.0) },
+                                                            colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                                                            shape = RoundedCornerShape(6.dp),
+                                                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .height(28.dp)
+                                                                .testTag("add_addon_${addOn.id}")
+                                                        ) {
+                                                            Text("+ Add", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                                                        }
+                                                    } else {
+                                                        Row(
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .height(28.dp)
+                                                                .background(Color.White, RoundedCornerShape(6.dp))
+                                                                .border(1.dp, SaffronPrimary, RoundedCornerShape(6.dp))
+                                                                .padding(horizontal = 4.dp)
+                                                        ) {
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .size(24.dp)
+                                                                    .clickable {
+                                                                        if (currentQty > 1.0) {
+                                                                            viewModel.addAddOnService(addOn, currentQty - 1.0)
+                                                                        } else {
+                                                                            viewModel.removeAddOnService(addOn.id)
+                                                                        }
+                                                                    },
+                                                                contentAlignment = Alignment.Center
+                                                            ) {
+                                                                Text(
+                                                                    "–",
+                                                                    fontWeight = FontWeight.ExtraBold,
+                                                                    fontSize = 14.sp,
+                                                                    color = SaffronPrimary
+                                                                )
+                                                            }
+
+                                                            Text(
+                                                                text = "${currentQty.toInt()}",
+                                                                fontWeight = FontWeight.ExtraBold,
+                                                                fontSize = 11.5.sp,
+                                                                color = Color.Black
+                                                            )
+
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .size(24.dp)
+                                                                    .clickable {
+                                                                        viewModel.addAddOnService(addOn, currentQty + 1.0)
+                                                                    },
+                                                                contentAlignment = Alignment.Center
+                                                            ) {
+                                                                Text(
+                                                                    "+",
+                                                                    fontWeight = FontWeight.ExtraBold,
+                                                                    fontSize = 14.sp,
+                                                                    color = SaffronPrimary
+                                                                )
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
                                         }
+                                    }
+
+                                    // Selected Add-ons summary list inside card
+                                    if (addonCartItems.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(10.dp))
+                                        Surface(
+                                            color = Color(0xFFFFF7ED),
+                                            shape = RoundedCornerShape(8.dp),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, AmberSecondary.copy(alpha = 0.4f)),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                                                Text(
+                                                    text = "✓ Selected Add-on Services (${addonCartItems.sumOf { it.quantity }.toInt()} units added):",
+                                                    fontSize = 10.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFF9A3412)
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                addonCartItems.forEach { addOnItem ->
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(vertical = 1.dp),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Text(
+                                                            text = "• ${addOnItem.name} (${addOnItem.quantity.toInt()}x)",
+                                                            fontSize = 10.5.sp,
+                                                            color = Color(0xFF334155),
+                                                            fontWeight = FontWeight.Medium
+                                                        )
+                                                        Text(
+                                                            text = "₹${addOnItem.totalPrice.toInt()}",
+                                                            fontSize = 10.5.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = Color(0xFF78350F)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Caterer partner only delivers pure food (सिर्फ खाना ही बेचेगा)
+                        item {
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)),
+                                shape = RoundedCornerShape(14.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFBBF7D0))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        color = Color(0xFFDCFCE7),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text("🍲", fontSize = 18.sp)
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = "${activeCaterer?.name ?: "Kitchen Partner"} • केवल शुद्ध खाना (Pure Food)",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.5.sp,
+                                            color = Color(0xFF166534)
+                                        )
+                                        Text(
+                                            text = "इस पार्टनर के पास केवल खाना बनाने व डिलीवरी की सुविधा है, कोई अतिरिक्त ऐड-ऑन सेवा लागू नहीं है।",
+                                            fontSize = 11.5.sp,
+                                            color = Color(0xFF15803D)
+                                        )
                                     }
                                 }
                             }

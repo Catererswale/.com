@@ -144,7 +144,8 @@ fun CatererDetailScreen(
                 category = "Biryani & Rice",
                 foodType = FoodType.NON_VEG,
                 imageUrl = "",
-                minQuantity = 2.0,
+                minQuantity = 1.0,
+                stepQuantity = 0.5,
                 maxQuantity = 50.0,
                 isAvailable = true,
                 prepTimeMinutes = 90
@@ -160,7 +161,8 @@ fun CatererDetailScreen(
                 category = "Biryani & Rice",
                 foodType = FoodType.NON_VEG,
                 imageUrl = "",
-                minQuantity = 3.0,
+                minQuantity = 1.0,
+                stepQuantity = 0.5,
                 maxQuantity = 50.0,
                 isAvailable = true,
                 prepTimeMinutes = 120
@@ -176,7 +178,8 @@ fun CatererDetailScreen(
                 category = "Biryani & Rice",
                 foodType = FoodType.VEG,
                 imageUrl = "",
-                minQuantity = 2.0,
+                minQuantity = 1.0,
+                stepQuantity = 0.5,
                 maxQuantity = 50.0,
                 isAvailable = true,
                 prepTimeMinutes = 60
@@ -192,7 +195,8 @@ fun CatererDetailScreen(
                 category = "Desserts & Sweets",
                 foodType = FoodType.VEG,
                 imageUrl = "",
-                minQuantity = 2.0,
+                minQuantity = 1.0,
+                stepQuantity = 0.5,
                 maxQuantity = 50.0,
                 isAvailable = true,
                 prepTimeMinutes = 45

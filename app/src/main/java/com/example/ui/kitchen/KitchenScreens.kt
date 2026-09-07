@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -109,6 +110,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -121,6 +123,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -149,6 +153,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.models.CateringAddOn
 import com.example.data.models.DeliveryBoyEntity
 import com.example.data.models.FoodType
 import com.example.data.models.KycStatus
@@ -165,6 +170,22 @@ import com.example.ui.theme.AmberSecondary
 import com.example.ui.theme.SaffronPrimary
 import com.example.ui.theme.VegGreen
 
+object KitchenNavTabs {
+    const val DASHBOARD = 0
+    const val OFFLINE_BOOKING = 1
+    const val SHARE_STORE = 2
+    const val ANALYTICS = 3
+    const val MENU = 4
+    const val ORDERS = 5
+    const val RAW_MATERIALS = 6
+    const val STAFF = 7
+    const val PRODUCTION = 8
+    const val CONTAINERS_CASH = 9
+    const val FINANCE = 10
+    const val KYC = 11
+    const val SETTINGS = 12
+}
+
 @Composable
 fun KitchenMainContainer(
     viewModel: CaterersViewModel,
@@ -175,6 +196,7 @@ fun KitchenMainContainer(
     var selectedStageFilterForOrders by remember { mutableStateOf("ALL") }
     val tabs = listOf(
         "Dashboard",
+        "Offline Booking 📝",
         "Share Store Link 🔗",
         "Analytics & Charts",
         "Menu & Prices",
@@ -182,8 +204,7 @@ fun KitchenMainContainer(
         "Raw Materials (Rashan)",
         "Staff & Halwai",
         "Production",
-        "Bartan Inventory",
-        "Offline Booking",
+        "Containers & Cash Summary 🍲💵",
         "Finance & Profit",
         "KYC & Profile",
         "Kitchen Settings"
@@ -244,27 +265,33 @@ fun KitchenMainContainer(
                 .background(Color(0xFFF9F6F0))
         ) {
             when (selectedTab) {
-                0 -> KitchenDashboardScreen(
+                KitchenNavTabs.DASHBOARD -> KitchenDashboardScreen(
                     viewModel = viewModel,
-                    onNavigateTab = { selectedTab = it },
+                    onNavigateTab = { target ->
+                        selectedTab = when (target) {
+                            9 -> KitchenNavTabs.CONTAINERS_CASH
+                            else -> target
+                        }
+                    },
                     onNavigateToOrdersWithStage = { stage ->
                         selectedStageFilterForOrders = stage
-                        selectedTab = 4
+                        selectedTab = KitchenNavTabs.ORDERS
                     },
                     onPreviewCustomerStore = onPreviewCustomerStore
                 )
-                1 -> KitchenDigitalStoreShareScreen(viewModel, onPreviewCustomerStore = onPreviewCustomerStore)
-                2 -> KitchenAnalyticsDashboard(viewModel)
-                3 -> KitchenMenuManagementScreen(viewModel)
-                4 -> KitchenOrderManagementScreen(viewModel, initialStageFilter = selectedStageFilterForOrders)
-                5 -> KitchenRawMaterialScreen(viewModel)
-                6 -> KitchenStaffManagementScreen(viewModel)
-                7 -> KitchenProductionScreen(viewModel)
-                8 -> KitchenBartanScreen(viewModel)
-                9 -> KitchenOfflineBookingScreen(viewModel)
-                10 -> KitchenFinanceScreen(viewModel)
-                11 -> KitchenProfileKycScreen(viewModel)
-                12 -> KitchenSettingsScreen(viewModel)
+                KitchenNavTabs.OFFLINE_BOOKING -> KitchenOfflineBookingScreen(viewModel)
+                KitchenNavTabs.SHARE_STORE -> KitchenDigitalStoreShareScreen(viewModel, onPreviewCustomerStore = onPreviewCustomerStore)
+                KitchenNavTabs.ANALYTICS -> KitchenAnalyticsDashboard(viewModel)
+                KitchenNavTabs.MENU -> KitchenMenuManagementScreen(viewModel)
+                KitchenNavTabs.ORDERS -> KitchenOrderManagementScreen(viewModel, initialStageFilter = selectedStageFilterForOrders)
+                KitchenNavTabs.RAW_MATERIALS -> KitchenRawMaterialScreen(viewModel)
+                KitchenNavTabs.STAFF -> KitchenStaffManagementScreen(viewModel)
+                KitchenNavTabs.PRODUCTION -> KitchenProductionScreen(viewModel)
+                KitchenNavTabs.CONTAINERS_CASH -> KitchenPendingContainersCashDashboardScreen(viewModel)
+                KitchenNavTabs.FINANCE -> KitchenFinanceScreen(viewModel)
+                KitchenNavTabs.KYC -> KitchenProfileKycScreen(viewModel)
+                KitchenNavTabs.SETTINGS -> KitchenSettingsScreen(viewModel)
+                else -> KitchenDashboardScreen(viewModel, onNavigateTab = { selectedTab = it })
             }
         }
     }
@@ -272,6 +299,20 @@ fun KitchenMainContainer(
 
 @Composable
 fun KitchenDashboardScreen(
+    viewModel: CaterersViewModel,
+    onNavigateTab: (Int) -> Unit,
+    onNavigateToOrdersWithStage: ((String) -> Unit)? = null,
+    onPreviewCustomerStore: (String) -> Unit = {}
+) {
+    KitchenResponsiveDashboard(
+        viewModel = viewModel,
+        onNavigateTab = onNavigateTab,
+        onPreviewCustomerStore = onPreviewCustomerStore
+    )
+}
+
+@Composable
+fun LegacyKitchenDashboardScreen(
     viewModel: CaterersViewModel,
     onNavigateTab: (Int) -> Unit,
     onNavigateToOrdersWithStage: ((String) -> Unit)? = null,
@@ -446,7 +487,7 @@ fun KitchenDashboardScreen(
                             }
                         }
 
-                        TextButton(onClick = { onNavigateTab(1) }) {
+                        TextButton(onClick = { onNavigateTab(KitchenNavTabs.SHARE_STORE) }) {
                             Text("QR Standee 👉", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SaffronPrimary)
                         }
                     }
@@ -668,10 +709,10 @@ fun KitchenDashboardScreen(
                     activeViewMode = "ANALYTICS"
                 }
                 QuickActionTile("Rashan List", Icons.Default.ShoppingCart, VegGreen, Modifier.weight(1f)) {
-                    onNavigateTab(5) // Raw materials (Rashan)
+                    onNavigateTab(KitchenNavTabs.RAW_MATERIALS) // Raw materials (Rashan)
                 }
                 QuickActionTile("Offline Booking", Icons.Default.ReceiptLong, Color(0xFF0288D1), Modifier.weight(1f)) {
-                    onNavigateTab(9) // Offline booking tab
+                    onNavigateTab(KitchenNavTabs.OFFLINE_BOOKING) // Offline booking tab
                 }
             }
         }
@@ -1022,7 +1063,7 @@ fun KitchenDashboardScreen(
                         if (onNavigateToOrdersWithStage != null) {
                             onNavigateToOrdersWithStage.invoke(stageToOpen)
                         } else {
-                            onNavigateTab(4)
+                            onNavigateTab(KitchenNavTabs.ORDERS)
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
@@ -2868,6 +2909,346 @@ fun KitchenProductionScreen(viewModel: CaterersViewModel) {
 @Composable
 fun KitchenBartanScreen(viewModel: CaterersViewModel) {
     val bartanRecords by viewModel.bartanRecordsList.collectAsState()
+    val allOrders by viewModel.ordersList.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    // 0: Container Return Tracker, 1: 50% Cash Payment Handover, 2: Delivery Boys Fleet & Hisaab
+    var mainSection by remember { mutableStateOf(0) }
+
+    // Delivery Boys for this kitchen
+    val allDeliveryBoys by viewModel.deliveryBoysList.collectAsState()
+    val selectedKitchenId by viewModel.selectedCatererId.collectAsState()
+    val activeKitchenId = selectedKitchenId ?: "caterer_1"
+    val myDeliveryBoys = remember(allDeliveryBoys, activeKitchenId) {
+        allDeliveryBoys.filter { it.kitchenId == activeKitchenId }
+    }
+
+    // Add / Edit Delivery Boy Dialog State
+    var showAddEditBoyDialog by remember { mutableStateOf(false) }
+    var editingBoy by remember { mutableStateOf<DeliveryBoyEntity?>(null) }
+    var boyNameInput by remember { mutableStateOf("") }
+    var boyMobileInput by remember { mutableStateOf("") }
+    var boyAadhaarInput by remember { mutableStateOf("") }
+    var boyDlInput by remember { mutableStateOf("") }
+    var boyValidationError by remember { mutableStateOf("") }
+
+    // Delete confirmation state
+    var boyToDelete by remember { mutableStateOf<DeliveryBoyEntity?>(null) }
+
+    // Expanded boy breakdown for hisaab inspection
+    var expandedBoyHisaabId by remember { mutableStateOf<String?>(null) }
+
+    // Filters for Container Return
+    var containerFilter by remember { mutableStateOf("PENDING") } // "PENDING", "RETURNED", "ALL"
+
+    // Filters for Cash Payment
+    var cashFilter by remember { mutableStateOf("PENDING") } // "PENDING", "SUBMITTED", "ALL"
+
+    // Cash Confirmation Dialog State
+    var orderToConfirmCash by remember { mutableStateOf<OrderEntity?>(null) }
+
+    val totalBartanCount = bartanRecords.size
+    val pendingBartanCount = bartanRecords.count { !it.isCollected }
+    val returnedBartanCount = bartanRecords.count { it.isCollected }
+
+    val filteredBartanRecords = remember(bartanRecords, containerFilter) {
+        when (containerFilter) {
+            "PENDING" -> bartanRecords.filter { !it.isCollected }
+            "RETURNED" -> bartanRecords.filter { it.isCollected }
+            else -> bartanRecords
+        }
+    }
+
+    // Cash Orders: delivered or balance cash orders
+    val cashOrders = remember(allOrders) {
+        allOrders.filter {
+            it.cashCollectedByDeliveryBoy > 0 || (it.orderStatus == OrderStatus.DELIVERED && it.balanceAmount > 0)
+        }
+    }
+
+    val pendingCashOrders = cashOrders.filter { !it.isCashSubmittedToKitchen }
+    val submittedCashOrders = cashOrders.filter { it.isCashSubmittedToKitchen }
+
+    val totalPendingCash = pendingCashOrders.sumOf { if (it.cashCollectedByDeliveryBoy > 0) it.cashCollectedByDeliveryBoy else it.balanceAmount }
+    val totalSubmittedCash = submittedCashOrders.sumOf { if (it.cashCollectedByDeliveryBoy > 0) it.cashCollectedByDeliveryBoy else it.balanceAmount }
+    val totalCollectedCash = totalPendingCash + totalSubmittedCash
+
+    val totalCashWithBoys = myDeliveryBoys.sumOf { boy ->
+        val bOrders = cashOrders.filter { (it.deliveryBoyId == boy.id || it.deliveryBoyName.equals(boy.name, ignoreCase = true)) && !it.isCashSubmittedToKitchen }
+        bOrders.sumOf { if (it.cashCollectedByDeliveryBoy > 0) it.cashCollectedByDeliveryBoy else it.balanceAmount }
+    }
+    val totalHandisWithBoys = myDeliveryBoys.sumOf { boy ->
+        val bRecords = bartanRecords.filter { (it.deliveryBoyId == boy.id || it.deliveryBoyName.equals(boy.name, ignoreCase = true)) && !it.isCollected }
+        bRecords.size
+    }
+
+    val filteredCashOrders = remember(cashOrders, cashFilter) {
+        when (cashFilter) {
+            "PENDING" -> pendingCashOrders
+            "SUBMITTED" -> submittedCashOrders
+            else -> cashOrders
+        }
+    }
+
+    if (orderToConfirmCash != null) {
+        val targetOrder = orderToConfirmCash!!
+        val cashAmt = if (targetOrder.cashCollectedByDeliveryBoy > 0) targetOrder.cashCollectedByDeliveryBoy else targetOrder.balanceAmount
+        AlertDialog(
+            onDismissRequest = { orderToConfirmCash = null },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.AttachMoney, contentDescription = null, tint = VegGreen)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Confirm Cash Receipt", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        "Kya aapko Delivery Boy (${targetOrder.deliveryBoyName ?: "Partner"}) se Order #${targetOrder.orderId} ka ₹${cashAmt.toInt()} Cash mil gaya hai?",
+                        fontSize = 13.5.sp,
+                        lineHeight = 19.sp,
+                        color = Color(0xFF1E293B)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF1F5F9)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text("👤 Customer: ${targetOrder.customerName}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text("🛵 Delivery Boy: ${targetOrder.deliveryBoyName ?: "Ramesh Sharma"} (${targetOrder.deliveryBoyMobile ?: "+91 9811223344"})", fontSize = 11.5.sp, color = Color(0xFF334155))
+                            Text("💰 Amount to Settle: ₹${cashAmt.toInt()}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = VegGreen)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "Kitchen cashier ke confirm karne par hi status 'Fully Settled' update hoga.",
+                        fontSize = 11.sp,
+                        color = Color.Gray
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.markCashReceivedByKitchen(targetOrder.orderId)
+                        orderToConfirmCash = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = VegGreen),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Haan, Cash Mil Gaya (Mark Received)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { orderToConfirmCash = null },
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Cancel", fontSize = 12.sp)
+                }
+            }
+        )
+    }
+
+    // Add / Edit Delivery Boy Dialog (Name, Mobile, Aadhaar compulsory; DL optional)
+    if (showAddEditBoyDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddEditBoyDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        if (editingBoy == null) Icons.Default.Add else Icons.Default.Edit,
+                        contentDescription = null,
+                        tint = SaffronPrimary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        if (editingBoy == null) "Add New Delivery Boy" else "Edit Delivery Boy",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        "Sirf aapka kitchen apne delivery boy ko add/edit kar sakta hai. Name, Mobile aur Aadhaar card number compulsory hain. Driving licence optional hai.",
+                        fontSize = 11.5.sp,
+                        color = Color(0xFF475569),
+                        lineHeight = 16.sp
+                    )
+
+                    OutlinedTextField(
+                        value = boyNameInput,
+                        onValueChange = { boyNameInput = it; boyValidationError = "" },
+                        label = { Text("Full Name (नाम) * Compulsory") },
+                        placeholder = { Text("e.g. Suresh Pal") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = boyMobileInput,
+                        onValueChange = { boyMobileInput = it; boyValidationError = "" },
+                        label = { Text("Mobile Number (मोबाइल) * Compulsory") },
+                        placeholder = { Text("e.g. +91 9876543210") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = boyAadhaarInput,
+                        onValueChange = { boyAadhaarInput = it; boyValidationError = "" },
+                        label = { Text("Aadhaar Card No. (12-अंक आधार) * Compulsory") },
+                        placeholder = { Text("e.g. 1234 5678 9012") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = boyDlInput,
+                        onValueChange = { boyDlInput = it },
+                        label = { Text("Driving Licence (ड्राइविंग लाइसेंस) - Optional") },
+                        placeholder = { Text("e.g. DL-0420190012345 (Optional)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    if (boyValidationError.isNotBlank()) {
+                        Text(
+                            text = "⚠️ $boyValidationError",
+                            color = Color(0xFFDC2626),
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val cleanName = boyNameInput.trim()
+                        val cleanMobile = boyMobileInput.trim()
+                        val cleanAadhaar = boyAadhaarInput.trim()
+                        val cleanDl = boyDlInput.trim()
+
+                        if (cleanName.isBlank()) {
+                            boyValidationError = "Delivery Boy ka Name compulsory hai!"
+                            return@Button
+                        }
+                        if (cleanMobile.length < 10) {
+                            boyValidationError = "Valid 10-digit Mobile Number compulsory hai!"
+                            return@Button
+                        }
+                        val aadhaarDigits = cleanAadhaar.replace(" ", "")
+                        if (aadhaarDigits.length != 12) {
+                            boyValidationError = "Valid 12-digit Aadhaar Card Number compulsory hai!"
+                            return@Button
+                        }
+
+                        if (editingBoy != null) {
+                            val updated = editingBoy!!.copy(
+                                name = cleanName,
+                                mobile = cleanMobile,
+                                aadhaarNumber = cleanAadhaar,
+                                drivingLicence = cleanDl
+                            )
+                            viewModel.updateDeliveryBoy(updated)
+                        } else {
+                            val newId = "db_${System.currentTimeMillis()}"
+                            val newBoy = DeliveryBoyEntity(
+                                id = newId,
+                                kitchenId = activeKitchenId,
+                                name = cleanName,
+                                mobile = cleanMobile,
+                                aadhaarNumber = cleanAadhaar,
+                                drivingLicence = cleanDl,
+                                isAadhaarVerified = true,
+                                isOnline = true,
+                                isBusy = false,
+                                todayCompletedDeliveries = 0,
+                                cashToSubmit = 0.0,
+                                pendingBartanCount = 0
+                            )
+                            viewModel.addDeliveryBoy(newBoy)
+                        }
+                        showAddEditBoyDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(if (editingBoy == null) "Register Delivery Boy" else "Save Changes", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { showAddEditBoyDialog = false },
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Cancel", fontSize = 12.sp)
+                }
+            }
+        )
+    }
+
+    // Delete Delivery Boy Dialog
+    if (boyToDelete != null) {
+        val boy = boyToDelete!!
+        AlertDialog(
+            onDismissRequest = { boyToDelete = null },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Delete, contentDescription = null, tint = Color(0xFFDC2626))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Delete Delivery Boy?", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        "Kya aap sach me delivery boy '${boy.name}' ko apne kitchen fleet se delete karna chahte hain?",
+                        fontSize = 13.5.sp,
+                        lineHeight = 18.sp,
+                        color = Color(0xFF1E293B)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "Mobile: ${boy.mobile}\nAadhaar: ${boy.aadhaarNumber}",
+                        fontSize = 11.5.sp,
+                        color = Color.Gray,
+                        lineHeight = 16.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteDeliveryBoy(boy.id, "caterer_1", boy.name)
+                        boyToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Haan, Delete Karein", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { boyToDelete = null },
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Cancel", fontSize = 12.sp)
+                }
+            }
+        )
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -2875,41 +3256,1139 @@ fun KitchenBartanScreen(viewModel: CaterersViewModel) {
             .padding(16.dp)
     ) {
         item {
-            Text("Bartan & Equipment Return Tracker", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Text("Track pending degs, buffet counters & serving utensils with customers", fontSize = 12.sp, color = Color.Gray)
+            // Main Section Switcher (3 Tabs: Handi, 50% Cash, Delivery Boys Fleet & Hisaab)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0xFFE2E8F0), RoundedCornerShape(10.dp))
+                    .padding(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // Tab 0: Containers / Handi Return
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { mainSection = 0 },
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (mainSection == 0) SaffronPrimary else Color.Transparent
+                ) {
+                    Row(
+                        modifier = Modifier.padding(vertical = 8.dp, horizontal = 2.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("🍲", fontSize = 12.sp)
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            "Handi ($pendingBartanCount)",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (mainSection == 0) Color.White else Color(0xFF475569),
+                            maxLines = 1
+                        )
+                    }
+                }
+
+                // Tab 1: 50% Cash Handover
+                Surface(
+                    modifier = Modifier
+                        .weight(1.1f)
+                        .clickable { mainSection = 1 },
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (mainSection == 1) SaffronPrimary else Color.Transparent
+                ) {
+                    Row(
+                        modifier = Modifier.padding(vertical = 8.dp, horizontal = 2.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("💵", fontSize = 12.sp)
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            "50% Cash (₹${totalPendingCash.toInt()})",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (mainSection == 1) Color.White else Color(0xFF475569),
+                            maxLines = 1
+                        )
+                    }
+                }
+
+                // Tab 2: Delivery Boys Fleet & Hisaab
+                Surface(
+                    modifier = Modifier
+                        .weight(1.2f)
+                        .clickable { mainSection = 2 },
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (mainSection == 2) SaffronPrimary else Color.Transparent
+                ) {
+                    Row(
+                        modifier = Modifier.padding(vertical = 8.dp, horizontal = 2.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("🛵", fontSize = 12.sp)
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            "Delivery Boys (${myDeliveryBoys.size})",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (mainSection == 2) Color.White else Color(0xFF475569),
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(12.dp))
         }
 
-        items(bartanRecords) { record ->
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                shape = RoundedCornerShape(10.dp)
-            ) {
+        if (mainSection == 0) {
+            // ==================== CONTAINER RETURN SECTION ====================
+            item {
+                // Policy Banner
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("⚠️", fontSize = 18.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "Deg / Bartan Container Policy (भाड़े पर नहीं देना है)",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.5.sp,
+                                color = Color(0xFF92400E)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Khana jis authentic metal deg/handi me deliver hota hai, us bartan ko customer se wapas mangana zaroori hai. Bartan bhade par nahi diye jaate hain.",
+                            fontSize = 11.sp,
+                            color = Color(0xFF78350F),
+                            lineHeight = 15.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // 9:30 AM Daily Morning Alert Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF)),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color(0xFFBFDBFE))
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("⏰", fontSize = 16.sp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    "Daily 9:30 AM Automated Alert",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = Color(0xFF1E3A8A)
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (pendingBartanCount > 0) Color(0xFFFEE2E2) else Color(0xFFDCFCE7)
+                            ) {
+                                Text(
+                                    if (pendingBartanCount > 0) "$pendingBartanCount Pending Returns" else "All Returned ✅",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (pendingBartanCount > 0) Color(0xFFB91C1C) else Color(0xFF15803D),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            "Jitne bartan baki hain, rozana subah 9:30 AM ko notification kitchen ko aur jo delivery boy lekar gaya tha dono ko automatically bheji jaati hai.",
+                            fontSize = 11.sp,
+                            color = Color(0xFF1E40AF),
+                            lineHeight = 15.sp
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Button(
+                            onClick = {
+                                viewModel.trigger930AmMorningAlert(showToast = true)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("🔔 Send 9:30 AM Alert Now (Kitchen & Delivery Boy Notification)", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Metrics Summary Row
                 Row(
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Card(
+                        modifier = Modifier.weight(1f),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Total Tracked", fontSize = 10.sp, color = Color.Gray)
+                            Text("$totalBartanCount", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF1E293B))
+                        }
+                    }
+                    Card(
+                        modifier = Modifier.weight(1f),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("With Customers (बाकी)", fontSize = 10.sp, color = Color(0xFFDC2626))
+                            Text("$pendingBartanCount", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFFDC2626))
+                        }
+                    }
+                    Card(
+                        modifier = Modifier.weight(1f),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Returned (वापस)", fontSize = 10.sp, color = VegGreen)
+                            Text("$returnedBartanCount", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = VegGreen)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Filter Tabs: Kitna Baki Hai vs Kitna Return Aa Gaya vs All
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    FilterChip(
+                        selected = containerFilter == "PENDING",
+                        onClick = { containerFilter = "PENDING" },
+                        label = { Text("⏳ Kitna Baki Hai ($pendingBartanCount)", fontSize = 11.sp, fontWeight = if (containerFilter == "PENDING") FontWeight.Bold else FontWeight.Normal) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFFFEE2E2),
+                            selectedLabelColor = Color(0xFFB91C1C)
+                        )
+                    )
+                    FilterChip(
+                        selected = containerFilter == "RETURNED",
+                        onClick = { containerFilter = "RETURNED" },
+                        label = { Text("✅ Return Aa Gaya ($returnedBartanCount)", fontSize = 11.sp, fontWeight = if (containerFilter == "RETURNED") FontWeight.Bold else FontWeight.Normal) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFFDCFCE7),
+                            selectedLabelColor = Color(0xFF15803D)
+                        )
+                    )
+                    FilterChip(
+                        selected = containerFilter == "ALL",
+                        onClick = { containerFilter = "ALL" },
+                        label = { Text("All ($totalBartanCount)", fontSize = 11.sp) }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Order Details, Customer Details & Delivery Boy Details", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = Color(0xFF334155))
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+
+            if (filteredBartanRecords.isEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Box(modifier = Modifier.padding(24.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Text("No containers in this filter right now 🎉", fontSize = 12.5.sp, color = Color.Gray)
+                        }
+                    }
+                }
+            }
+
+            items(filteredBartanRecords) { record ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 5.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(12.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Order #${record.orderId}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1E293B))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = if (record.isCollected) Color(0xFFDCFCE7) else Color(0xFFFEF3C7)
+                                    ) {
+                                        Text(
+                                            if (record.isCollected) "Returned ✅" else "Pending Collection ⏳",
+                                            color = if (record.isCollected) VegGreen else Color(0xFFB45309),
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("👤 Customer: ${record.customerName}", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                                if (record.customerAddress.isNotBlank()) {
+                                    Text("📍 Address: ${record.customerAddress}", fontSize = 11.sp, color = Color.Gray)
+                                }
+                                Text("🍲 Utensils: ${record.itemsDescription}", fontSize = 11.5.sp, fontWeight = FontWeight.Medium, color = SaffronPrimary)
+                                Text("📅 Delivered On: ${record.deliveryDate}", fontSize = 10.5.sp, color = Color.Gray)
+                            }
+
+                            if (record.customerMobile.isNotBlank()) {
+                                IconButton(
+                                    onClick = {
+                                        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${record.customerMobile}"))
+                                        context.startActivity(intent)
+                                    },
+                                    modifier = Modifier.size(34.dp)
+                                ) {
+                                    Icon(Icons.Default.Call, contentDescription = "Call Customer", tint = VegGreen, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        HorizontalDivider(color = Color(0xFFF1F5F9))
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Responsible Delivery Boy Details
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("🛵 Delivered by Boy (जिम्मेदार डिलीवरी बॉय):", fontSize = 10.5.sp, color = Color.Gray)
+                                Text(
+                                    if (record.deliveryBoyName.isNotBlank()) "${record.deliveryBoyName} (${record.deliveryBoyMobile})" else "Ramesh Sharma (+91 9811223344)",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF334155)
+                                )
+                            }
+
+                            val boyPhone = record.deliveryBoyMobile.ifBlank { "+919811223344" }
+                            IconButton(
+                                onClick = {
+                                    val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$boyPhone"))
+                                    context.startActivity(intent)
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(Icons.Default.Call, contentDescription = "Call Delivery Boy", tint = Color(0xFF2563EB), modifier = Modifier.size(16.dp))
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Action Button
+                        if (!record.isCollected) {
+                            Button(
+                                onClick = { viewModel.markBartanCollected(record.id, "2026-07-25") },
+                                colors = ButtonDefaults.buttonColors(containerColor = VegGreen),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("mark_bartan_collected_${record.id}")
+                            ) {
+                                Text("Mark Returned to Kitchen (किचन में वापस जमा हुआ)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            Surface(
+                                color = Color(0xFFF0FDF4),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(8.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("✅ Deg / Containers Verified & Restocked in Kitchen", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = VegGreen)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (mainSection == 1) {
+            // ==================== CASH PAYMENT (50% COD) SECTION ====================
+            item {
+                // Rule Card (as emphasized by user)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF2F2)),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color(0xFFFECACA))
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("🛡️", fontSize = 18.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "Cash Settlement Rule (किचन वेरिफिकेशन नियम)",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.5.sp,
+                                color = Color(0xFF991B1B)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            "Delivery hone ke baad balance 50% cash payment delivery boy ke paas rahega. Delivery boy kitchen ko lakar dega. Jab tak kitchen yahan 'Mark Cash Received' nahi karega, tab tak status change nahi hoga!",
+                            fontSize = 11.5.sp,
+                            color = Color(0xFF7F1D1D),
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Cash Metrics Summary
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Card(
+                        modifier = Modifier.weight(1f),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Kitna Baki Hai (बकाया)", fontSize = 10.sp, color = Color(0xFFDC2626))
+                            Text("₹${totalPendingCash.toInt()}", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFFDC2626))
+                            Text("${pendingCashOrders.size} Orders with Boys", fontSize = 9.sp, color = Color.Gray)
+                        }
+                    }
+                    Card(
+                        modifier = Modifier.weight(1f),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Kitna Diya (किचन में जमा)", fontSize = 10.sp, color = VegGreen)
+                            Text("₹${totalSubmittedCash.toInt()}", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = VegGreen)
+                            Text("${submittedCashOrders.size} Orders Settled", fontSize = 9.sp, color = Color.Gray)
+                        }
+                    }
+                    Card(
+                        modifier = Modifier.weight(1f),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Total 50% Cash", fontSize = 10.sp, color = Color(0xFF1E293B))
+                            Text("₹${totalCollectedCash.toInt()}", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF1E293B))
+                            Text("${cashOrders.size} Cash Orders", fontSize = 9.sp, color = Color.Gray)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Cash Filters
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    FilterChip(
+                        selected = cashFilter == "PENDING",
+                        onClick = { cashFilter = "PENDING" },
+                        label = { Text("⚠️ Kitna Baki Hai (${pendingCashOrders.size})", fontSize = 11.sp, fontWeight = if (cashFilter == "PENDING") FontWeight.Bold else FontWeight.Normal) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFFFEE2E2),
+                            selectedLabelColor = Color(0xFFB91C1C)
+                        )
+                    )
+                    FilterChip(
+                        selected = cashFilter == "SUBMITTED",
+                        onClick = { cashFilter = "SUBMITTED" },
+                        label = { Text("✅ Kitna Diya / Jama (${submittedCashOrders.size})", fontSize = 11.sp, fontWeight = if (cashFilter == "SUBMITTED") FontWeight.Bold else FontWeight.Normal) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFFDCFCE7),
+                            selectedLabelColor = Color(0xFF15803D)
+                        )
+                    )
+                    FilterChip(
+                        selected = cashFilter == "ALL",
+                        onClick = { cashFilter = "ALL" },
+                        label = { Text("All (${cashOrders.size})", fontSize = 11.sp) }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Order Details, Customer Details & Delivery Boy Details", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = Color(0xFF334155))
+                Spacer(modifier = Modifier.height(6.dp))
+            }
+
+            if (filteredCashOrders.isEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Box(modifier = Modifier.padding(24.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Text("No cash orders matching this filter 🎉", fontSize = 12.5.sp, color = Color.Gray)
+                        }
+                    }
+                }
+            }
+
+            items(filteredCashOrders) { order ->
+                val cashToCollect = if (order.cashCollectedByDeliveryBoy > 0) order.cashCollectedByDeliveryBoy else order.balanceAmount
+                val isSubmitted = order.isCashSubmittedToKitchen
+
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 5.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(12.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        // Order Header
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Order #${order.orderId}", fontWeight = FontWeight.Bold, fontSize = 13.5.sp, color = Color(0xFF1E293B))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = if (isSubmitted) Color(0xFFDCFCE7) else Color(0xFFFEE2E2)
+                                    ) {
+                                        Text(
+                                            if (isSubmitted) "Kitchen Confirmed ✅" else "Pending with Boy ⚠️",
+                                            color = if (isSubmitted) VegGreen else Color(0xFFB91C1C),
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("📦 Items: ${order.itemsSummary}", fontSize = 11.5.sp, color = Color(0xFF475569))
+                                Text("📅 Delivered: ${order.deliveryDate} (${order.deliveryTimeSlot})", fontSize = 10.5.sp, color = Color.Gray)
+                            }
+
+                            // Payment Status Tag
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text("₹${cashToCollect.toInt()}", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = if (isSubmitted) VegGreen else Color(0xFFDC2626))
+                                Text("50% Balance Cash", fontSize = 9.5.sp, color = Color.Gray)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        HorizontalDivider(color = Color(0xFFF1F5F9))
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Customer Details
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("👤 Customer Details:", fontSize = 10.5.sp, color = Color.Gray)
+                                Text(order.customerName, fontWeight = FontWeight.SemiBold, fontSize = 12.5.sp, color = Color(0xFF1E293B))
+                                if (order.customerMobile.isNotBlank()) {
+                                    Text("📞 ${order.customerMobile}", fontSize = 11.sp, color = Color(0xFF475569))
+                                }
+                                if (order.deliveryAddress.isNotBlank()) {
+                                    Text("📍 ${order.deliveryAddress}", fontSize = 10.5.sp, color = Color.Gray, maxLines = 1)
+                                }
+                            }
+
+                            if (order.customerMobile.isNotBlank()) {
+                                IconButton(
+                                    onClick = {
+                                        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${order.customerMobile}"))
+                                        context.startActivity(intent)
+                                    },
+                                    modifier = Modifier.size(34.dp)
+                                ) {
+                                    Icon(Icons.Default.Call, contentDescription = "Call Customer", tint = VegGreen, modifier = Modifier.size(18.dp))
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        HorizontalDivider(color = Color(0xFFF1F5F9))
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        // Delivery Boy Details (Who has the cash)
+                        val boyName = order.deliveryBoyName ?: "Ramesh Sharma"
+                        val boyMobile = order.deliveryBoyMobile ?: "+91 9811223344"
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("🛵 Delivery Boy Details (Cash in Hand):", fontSize = 10.5.sp, color = Color.Gray)
+                                Text(boyName, fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = Color(0xFF1E293B))
+                                Text("📞 $boyMobile", fontSize = 11.sp, color = Color(0xFF2563EB))
+                                Text(
+                                    if (isSubmitted) "Status: ₹${cashToCollect.toInt()} Handed over & received in kitchen" else "Status: ₹${cashToCollect.toInt()} Delivery boy ke paas hai (किचन को देना बाकी)",
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (isSubmitted) VegGreen else Color(0xFFDC2626)
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$boyMobile"))
+                                    context.startActivity(intent)
+                                },
+                                modifier = Modifier.size(34.dp)
+                            ) {
+                                Icon(Icons.Default.Call, contentDescription = "Call Delivery Boy", tint = Color(0xFF2563EB), modifier = Modifier.size(18.dp))
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Action: Mark Cash Received (Only Kitchen can change this status!)
+                        if (!isSubmitted) {
+                            Button(
+                                onClick = { orderToConfirmCash = order },
+                                colors = ButtonDefaults.buttonColors(containerColor = VegGreen),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("mark_cash_received_${order.orderId}")
+                            ) {
+                                Text("✅ Mark Cash Received from $boyName (₹${cashToCollect.toInt()} स्वीकार करें)", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            Surface(
+                                color = Color(0xFFF0FDF4),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(8.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("✅ Cash Handover Confirmed & Settled by Kitchen Cashier", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = VegGreen)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            // ==================== DELIVERY BOYS HISAAB & FLEET (SECTION 2) ====================
+            item {
+                // Info & Authority Banner
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF)),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color(0xFFBFDBFE))
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("🛵", fontSize = 20.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    "Kitchen Delivery Fleet & Hisaab (डिलीवरी बॉय व हिसाब)",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.5.sp,
+                                    color = Color(0xFF1E40AF)
+                                )
+                                Text(
+                                    "Sirf kitchen apne delivery boy ko Add, Edit, Delete karega",
+                                    fontSize = 10.5.sp,
+                                    color = Color(0xFF3B82F6),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            "Aadhaar card, Mobile number aur Name compulsory hain, Driving Licence optional hai. Check karein kaun se delivery boy ke paas kitna bartan baki hai aur kitna cash baki hai total.",
+                            fontSize = 11.5.sp,
+                            color = Color(0xFF1E3A8A),
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Summary Hisaab Counters Across All Delivery Boys
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Card(
+                        modifier = Modifier.weight(1f),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text("Total Fleet", fontSize = 10.5.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text("${myDeliveryBoys.size} Boys", fontSize = 15.sp, fontWeight = FontWeight.Black, color = Color(0xFF1E293B))
+                            Text("Only your kitchen", fontSize = 9.5.sp, color = Color(0xFF64748B))
+                        }
+                    }
+
+                    Card(
+                        modifier = Modifier.weight(1.1f),
+                        colors = CardDefaults.cardColors(containerColor = if (totalCashWithBoys > 0) Color(0xFFFEF2F2) else Color(0xFFF0FDF4)),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, if (totalCashWithBoys > 0) Color(0xFFFECACA) else Color(0xFFBBF7D0))
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text("Total Cash Baki", fontSize = 10.5.sp, color = if (totalCashWithBoys > 0) Color(0xFF991B1B) else VegGreen, fontWeight = FontWeight.SemiBold)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text("₹${totalCashWithBoys.toInt()}", fontSize = 15.sp, fontWeight = FontWeight.Black, color = if (totalCashWithBoys > 0) Color(0xFFDC2626) else VegGreen)
+                            Text(if (totalCashWithBoys > 0) "Pending with boys" else "All settled", fontSize = 9.5.sp, color = Color.Gray)
+                        }
+                    }
+
+                    Card(
+                        modifier = Modifier.weight(1.1f),
+                        colors = CardDefaults.cardColors(containerColor = if (totalHandisWithBoys > 0) Color(0xFFFFFBEB) else Color(0xFFF0FDF4)),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, if (totalHandisWithBoys > 0) Color(0xFFFDE68A) else Color(0xFFBBF7D0))
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text("Handi Baki", fontSize = 10.5.sp, color = if (totalHandisWithBoys > 0) Color(0xFF92400E) else VegGreen, fontWeight = FontWeight.SemiBold)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text("$totalHandisWithBoys Handi", fontSize = 15.sp, fontWeight = FontWeight.Black, color = if (totalHandisWithBoys > 0) AmberSecondary else VegGreen)
+                            Text(if (totalHandisWithBoys > 0) "To be collected" else "All returned", fontSize = 9.5.sp, color = Color.Gray)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Action Bar: Add Delivery Boy
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Order #${record.orderId} - ${record.customerName}", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        Text("Utensils: ${record.itemsDescription}", fontSize = 11.sp, color = SaffronPrimary)
-                        Text("Delivery Date: ${record.deliveryDate}", fontSize = 11.sp, color = Color.Gray)
+                    Column {
+                        Text("Kitchen Delivery Team (${myDeliveryBoys.size})", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF1E293B))
+                        Text("Live Cash & Handi Balance Per Boy", fontSize = 10.5.sp, color = Color.Gray)
                     }
 
-                    if (!record.isCollected) {
-                        Button(
-                            onClick = { viewModel.markBartanCollected(record.id, "2026-07-25") },
-                            colors = ButtonDefaults.buttonColors(containerColor = VegGreen),
-                            modifier = Modifier.testTag("mark_bartan_collected_${record.id}")
+                    Button(
+                        onClick = {
+                            editingBoy = null
+                            boyNameInput = ""
+                            boyMobileInput = ""
+                            boyAadhaarInput = ""
+                            boyDlInput = ""
+                            boyValidationError = ""
+                            showAddEditBoyDialog = true
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.testTag("add_delivery_boy_button")
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Add Delivery Boy", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+            }
+
+            if (myDeliveryBoys.isEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text("Mark Returned", fontSize = 10.sp)
+                            Text("🛵", fontSize = 36.sp)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Aapke kitchen me abhi koi delivery boy add nahi hai", fontWeight = FontWeight.Bold, fontSize = 13.5.sp, color = Color(0xFF1E293B))
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Apne delivery boys ko add karne ke liye upar 'Add Delivery Boy' par click karein.", fontSize = 11.5.sp, color = Color.Gray, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                         }
-                    } else {
-                        Surface(color = Color(0xFFE8F5E9), shape = RoundedCornerShape(4.dp)) {
-                            Text("Collected ✅", color = VegGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(6.dp))
+                    }
+                }
+            } else {
+                items(myDeliveryBoys) { boy ->
+                    // Calculate hisaab for this boy
+                    val boyCashOrders = cashOrders.filter { it.deliveryBoyId == boy.id || it.deliveryBoyName.equals(boy.name, ignoreCase = true) }
+                    val boyPendingCashOrders = boyCashOrders.filter { !it.isCashSubmittedToKitchen }
+                    val boyPendingCash = boyPendingCashOrders.sumOf { if (it.cashCollectedByDeliveryBoy > 0) it.cashCollectedByDeliveryBoy else it.balanceAmount }
+
+                    val boyBartans = bartanRecords.filter { it.deliveryBoyId == boy.id || it.deliveryBoyName.equals(boy.name, ignoreCase = true) }
+                    val boyPendingBartans = boyBartans.filter { !it.isCollected }
+
+                    val isExpanded = expandedBoyHisaabId == boy.id
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, if (boyPendingCash > 0 || boyPendingBartans.isNotEmpty()) Color(0xFFFED7AA) else Color(0xFFE2E8F0))
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            // Boy Header
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Surface(
+                                        color = Color(0xFFEFF6FF),
+                                        shape = CircleShape,
+                                        modifier = Modifier.size(40.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Icon(Icons.Default.DeliveryDining, contentDescription = null, tint = Color(0xFF2563EB), modifier = Modifier.size(24.dp))
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(boy.name, fontWeight = FontWeight.Bold, fontSize = 14.5.sp, color = Color(0xFF1E293B))
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Surface(
+                                                color = if (boy.isOnline) Color(0xFFDCFCE7) else Color(0xFFF1F5F9),
+                                                shape = RoundedCornerShape(4.dp)
+                                            ) {
+                                                Text(
+                                                    if (boy.isOnline) "🟢 Online & Active" else "⚪ Offline",
+                                                    fontSize = 9.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (boy.isOnline) VegGreen else Color.Gray,
+                                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Quick Call Action
+                                IconButton(
+                                    onClick = {
+                                        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${boy.mobile}"))
+                                        context.startActivity(intent)
+                                    },
+                                    modifier = Modifier.size(34.dp)
+                                ) {
+                                    Icon(Icons.Default.Call, contentDescription = "Call", tint = VegGreen, modifier = Modifier.size(20.dp))
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+                            HorizontalDivider(color = Color(0xFFF1F5F9))
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Mandatory & Optional ID Details
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("📞 Mobile (Compulsory):", fontSize = 11.5.sp, color = Color(0xFF64748B))
+                                    Text(boy.mobile, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("🪪 Aadhaar Card (Compulsory):", fontSize = 11.5.sp, color = Color(0xFF64748B))
+                                    Text(boy.aadhaarNumber, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("🚗 Driving Licence (Optional):", fontSize = 11.5.sp, color = Color(0xFF64748B))
+                                    Text(
+                                        if (boy.drivingLicence.isNotBlank()) boy.drivingLicence else "Not provided (Optional)",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = if (boy.drivingLicence.isNotBlank()) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (boy.drivingLicence.isNotBlank()) Color(0xFF334155) else Color.Gray
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Live Hisaab Metrics for This Delivery Boy (Kitna bartan baki hai, Kitna cash baki hai)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // Cash Baki Box
+                                Surface(
+                                    modifier = Modifier.weight(1f),
+                                    color = if (boyPendingCash > 0) Color(0xFFFEF2F2) else Color(0xFFF0FDF4),
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(1.dp, if (boyPendingCash > 0) Color(0xFFFECACA) else Color(0xFFBBF7D0))
+                                ) {
+                                    Column(modifier = Modifier.padding(8.dp)) {
+                                        Text("💵 Cash Baki", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = if (boyPendingCash > 0) Color(0xFF991B1B) else VegGreen)
+                                        Text(
+                                            "₹${boyPendingCash.toInt()}",
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Black,
+                                            color = if (boyPendingCash > 0) Color(0xFFDC2626) else VegGreen
+                                        )
+                                        Text(
+                                            if (boyPendingCash > 0) "${boyPendingCashOrders.size} Orders Baki" else "Sab Jama Hai ✅",
+                                            fontSize = 9.sp,
+                                            color = Color.Gray
+                                        )
+                                    }
+                                }
+
+                                // Handi Baki Box
+                                Surface(
+                                    modifier = Modifier.weight(1f),
+                                    color = if (boyPendingBartans.isNotEmpty()) Color(0xFFFFFBEB) else Color(0xFFF0FDF4),
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(1.dp, if (boyPendingBartans.isNotEmpty()) Color(0xFFFDE68A) else Color(0xFFBBF7D0))
+                                ) {
+                                    Column(modifier = Modifier.padding(8.dp)) {
+                                        Text("🍲 Bartan Baki", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = if (boyPendingBartans.isNotEmpty()) Color(0xFF92400E) else VegGreen)
+                                        Text(
+                                            "${boyPendingBartans.size} Handi",
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Black,
+                                            color = if (boyPendingBartans.isNotEmpty()) AmberSecondary else VegGreen
+                                        )
+                                        Text(
+                                            if (boyPendingBartans.isNotEmpty()) "Customer ke paas" else "Sab Return Aa Gaye ✅",
+                                            fontSize = 9.sp,
+                                            color = Color.Gray
+                                        )
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // Action Buttons Row: View Hisaab, Edit, Delete
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Button(
+                                    onClick = {
+                                        expandedBoyHisaabId = if (isExpanded) null else boy.id
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = if (isExpanded) Color(0xFF334155) else Color(0xFF2563EB)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        if (isExpanded) "Band Karein ▲" else "Hisaab Dekhein (${boyPendingCashOrders.size + boyPendingBartans.size}) ▼",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        editingBoy = boy
+                                        boyNameInput = boy.name
+                                        boyMobileInput = boy.mobile
+                                        boyAadhaarInput = boy.aadhaarNumber
+                                        boyDlInput = boy.drivingLicence
+                                        boyValidationError = ""
+                                        showAddEditBoyDialog = true
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text("Edit", fontSize = 11.sp)
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        boyToDelete = boy
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFDC2626)),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = Color(0xFFDC2626), modifier = Modifier.size(14.dp))
+                                }
+                            }
+
+                            // Expanded Hisaab Section (Live breakdown of pending cash and handis)
+                            if (isExpanded) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                HorizontalDivider(color = Color(0xFFE2E8F0))
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Text(
+                                    "📊 Live Hisaab Breakdown - ${boy.name}",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.5.sp,
+                                    color = Color(0xFF0F172A)
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                if (boyPendingCashOrders.isEmpty() && boyPendingBartans.isEmpty()) {
+                                    Surface(
+                                        color = Color(0xFFF0FDF4),
+                                        shape = RoundedCornerShape(6.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(10.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text("✅", fontSize = 16.sp)
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Is delivery boy ke paas koi cash ya bartan baki nahi hai. Sab hisaab barabar hai!", fontSize = 11.sp, color = VegGreen, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+
+                                // Pending Cash Orders
+                                if (boyPendingCashOrders.isNotEmpty()) {
+                                    Text(
+                                        "💵 Pending 50% Cash Handover (किचन को देना बाकी):",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF991B1B)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                    boyPendingCashOrders.forEach { order ->
+                                        val cashAmt = if (order.cashCollectedByDeliveryBoy > 0) order.cashCollectedByDeliveryBoy else order.balanceAmount
+                                        Surface(
+                                            color = Color(0xFFFEF2F2),
+                                            shape = RoundedCornerShape(6.dp),
+                                            border = BorderStroke(1.dp, Color(0xFFFECACA)),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(bottom = 6.dp)
+                                        ) {
+                                            Column(modifier = Modifier.padding(8.dp)) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Text("#${order.orderId} • ${order.customerName}", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                                    Text("₹${cashAmt.toInt()}", fontWeight = FontWeight.Black, fontSize = 12.sp, color = Color(0xFFDC2626))
+                                                }
+                                                Text("📞 ${order.customerMobile} • 📍 ${order.deliveryAddress}", fontSize = 10.sp, color = Color.Gray)
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                Button(
+                                                    onClick = { orderToConfirmCash = order },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = VegGreen),
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                                    modifier = Modifier.fillMaxWidth()
+                                                ) {
+                                                    Text("✅ Mark Cash Received (₹${cashAmt.toInt()} स्वीकार करें)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                }
+
+                                // Pending Bartans
+                                if (boyPendingBartans.isNotEmpty()) {
+                                    Text(
+                                        "🍲 Pending Handi / Containers (किचन में जमा होना बाकी):",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF92400E)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+
+                                    boyPendingBartans.forEach { record ->
+                                        Surface(
+                                            color = Color(0xFFFFFBEB),
+                                            shape = RoundedCornerShape(6.dp),
+                                            border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(bottom = 6.dp)
+                                        ) {
+                                            Column(modifier = Modifier.padding(8.dp)) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Text("#${record.orderId} • ${record.customerName}", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                                    Text(record.itemsDescription, fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = AmberSecondary)
+                                                }
+                                                Text("📞 ${record.customerMobile} • 📍 ${record.customerAddress}", fontSize = 10.sp, color = Color.Gray)
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                Button(
+                                                    onClick = { viewModel.markBartanCollected(record.id, "2026-07-25") },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = VegGreen),
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                                    modifier = Modifier.fillMaxWidth()
+                                                ) {
+                                                    Text("🍲 Handi Mil Gaya (Kitchen me Jama)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -2994,12 +4473,18 @@ fun KitchenMenuManagementScreen(viewModel: CaterersViewModel) {
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("All") }
 
+    val customAddonServices by viewModel.customAddonServices.collectAsState()
+
     var isAddDialogOpen by remember { mutableStateOf(false) }
     var editingMenuItem by remember { mutableStateOf<MenuItemEntity?>(null) }
     var deletingMenuItem by remember { mutableStateOf<MenuItemEntity?>(null) }
     var changingPhotoItem by remember { mutableStateOf<MenuItemEntity?>(null) }
 
-    val categories = listOf("All", "Biryani & Rice", "Starters & Snacks", "Main Course Curry", "Breads & Roti", "Desserts & Drinks")
+    var isAddAddonDialogOpen by remember { mutableStateOf(false) }
+    var editingAddon by remember { mutableStateOf<CateringAddOn?>(null) }
+    var deletingAddon by remember { mutableStateOf<CateringAddOn?>(null) }
+
+    val categories = listOf("All", "Biryani & Rice", "Starters & Snacks", "Main Course Curry", "Breads & Roti", "Desserts & Drinks", "✨ Add-on Services")
 
     // Preset high-quality catering food photos
     val presetFoodPhotos = listOf(
@@ -3061,15 +4546,28 @@ fun KitchenMenuManagementScreen(viewModel: CaterersViewModel) {
                         Text("Total Dishes: ${kitchenMenuItems.size} | Active: ${kitchenMenuItems.count { it.isAvailable }}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                     }
 
-                    Button(
-                        onClick = { isAddDialogOpen = true },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = SaffronPrimary),
-                        shape = RoundedCornerShape(20.dp),
-                        modifier = Modifier.testTag("add_menu_item_button")
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Add Dish", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Button(
+                            onClick = { isAddDialogOpen = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = SaffronPrimary),
+                            shape = RoundedCornerShape(20.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            modifier = Modifier.testTag("add_menu_item_button")
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text("Dish", fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
+                        }
+
+                        Button(
+                            onClick = { isAddAddonDialogOpen = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = AmberSecondary, contentColor = Color(0xFF78350F)),
+                            shape = RoundedCornerShape(20.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            modifier = Modifier.testTag("add_addon_service_button")
+                        ) {
+                            Text("✨ + Add-on", fontWeight = FontWeight.Bold, fontSize = 11.5.sp)
+                        }
                     }
                 }
             }
@@ -3080,7 +4578,7 @@ fun KitchenMenuManagementScreen(viewModel: CaterersViewModel) {
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
-                placeholder = { Text("Search menu item by name...", fontSize = 13.sp) },
+                placeholder = { Text("Search dishes & add-ons by name...", fontSize = 13.sp) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
@@ -3122,6 +4620,227 @@ fun KitchenMenuManagementScreen(viewModel: CaterersViewModel) {
 
             Spacer(modifier = Modifier.height(12.dp))
         }
+
+        if (selectedCategory == "✨ Add-on Services") {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBEB)),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, AmberSecondary.copy(alpha = 0.5f))
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "✨ Catering Add-on Services (कारीगर, प्लेट्स व रायता)",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = Color(0xFF78350F)
+                                )
+                                Text(
+                                    "यहाँ से आप हर ऐड-ऑन का चार्ज (Rate ₹) और प्लेट्स/पैकेज क्वांटिटी (Plate Qty) खुद तय कर सकते हैं।",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF92400E)
+                                )
+                            }
+                            Button(
+                                onClick = { isAddAddonDialogOpen = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Text("+ Add Package", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+            }
+
+            val filteredAddons = customAddonServices.filter { addOn ->
+                if (searchQuery.isBlank()) true
+                else addOn.name.contains(searchQuery, true) || addOn.hindiName.contains(searchQuery, true) || addOn.servesText.contains(searchQuery, true)
+            }
+
+            if (filteredAddons.isEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("✨", fontSize = 32.sp)
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text("No Add-on Services Found", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("Tap '+ Add Package' to create an add-on service with custom rate & plate quantity.", fontSize = 12.sp, color = Color.Gray)
+                        }
+                    }
+                }
+            }
+
+            items(filteredAddons) { addOn ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp)
+                        .testTag("addon_mgmt_card_${addOn.id}"),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (addOn.isAvailable) Color.White else Color(0xFFF8FAFC),
+                        contentColor = Color(0xFF1E293B)
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    border = BorderStroke(1.dp, if (addOn.isAvailable) Color(0xFFFED7AA) else Color(0xFFE2E8F0))
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Surface(
+                                    color = Color(0xFFFFF7ED),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.size(46.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(addOn.icon, fontSize = 24.sp)
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(addOn.name, fontWeight = FontWeight.Bold, fontSize = 14.5.sp, color = Color(0xFF1E293B))
+                                    Text(addOn.hindiName, fontSize = 12.sp, color = Color(0xFFB45309), fontWeight = FontWeight.SemiBold)
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Surface(
+                                            color = Color(0xFFFEF3C7),
+                                            shape = RoundedCornerShape(6.dp)
+                                        ) {
+                                            Text(
+                                                "Rate: ₹${addOn.price.toInt()} / ${addOn.unit}",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF78350F),
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                        Surface(
+                                            color = Color(0xFFF1F5F9),
+                                            shape = RoundedCornerShape(6.dp)
+                                        ) {
+                                            Text(
+                                                "📦 ${addOn.servesText}",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = Color(0xFF334155),
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            Column(horizontalAlignment = Alignment.End) {
+                                Switch(
+                                    checked = addOn.isAvailable,
+                                    onCheckedChange = { viewModel.toggleAddonAvailability(addOn.id, it) },
+                                    colors = SwitchDefaults.colors(checkedThumbColor = SaffronPrimary)
+                                )
+                                Text(
+                                    if (addOn.isAvailable) "Active" else "Disabled",
+                                    fontSize = 10.sp,
+                                    color = if (addOn.isAvailable) Color(0xFF15803D) else Color.Gray,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(addOn.description, fontSize = 11.5.sp, color = Color(0xFF475569), lineHeight = 15.sp)
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedButton(
+                                onClick = { editingAddon = addOn },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.testTag("edit_addon_${addOn.id}")
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(13.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Edit Rate & Package (रेट व प्लेट्स बदलें)", fontSize = 11.sp)
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            OutlinedButton(
+                                onClick = { deletingAddon = addOn },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.testTag("delete_addon_${addOn.id}")
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(13.dp))
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            if (selectedCategory == "All") {
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 10.dp)
+                            .clickable { selectedCategory = "✨ Add-on Services" },
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBEB)),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, AmberSecondary.copy(alpha = 0.5f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Text("🛎️", fontSize = 22.sp)
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        "Catering Add-on Services (${customAddonServices.count { it.isAvailable }} Active)",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = Color(0xFF78350F)
+                                    )
+                                    Text(
+                                        "Biryani Helper Staff, Plates & Kachumar packages • Tap to edit rates & plate quantities",
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF92400E)
+                                    )
+                                }
+                            }
+                            Text(
+                                "Manage →",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SaffronPrimary
+                            )
+                        }
+                    }
+                }
+            }
 
         if (filteredItems.isEmpty()) {
             item {
@@ -3291,6 +5010,7 @@ fun KitchenMenuManagementScreen(viewModel: CaterersViewModel) {
             }
         }
     }
+    }
 
     // Quick Change Photo Dialog
     if (changingPhotoItem != null) {
@@ -3449,7 +5169,7 @@ fun KitchenMenuManagementScreen(viewModel: CaterersViewModel) {
         var description by remember { mutableStateOf(target?.description ?: "") }
         var imageUrl by remember { mutableStateOf(target?.imageUrl ?: "") }
         var priceStr by remember { mutableStateOf(target?.pricePerUnit?.toString() ?: "450") }
-        var minQtyStr by remember { mutableStateOf(target?.minQuantity?.toString() ?: "5.0") }
+        var minQtyStr by remember { mutableStateOf(target?.minQuantity?.let { if (it % 1.0 == 0.0) it.toInt().toString() else it.toString() } ?: "1.0") }
         var selectedFoodType by remember { mutableStateOf(target?.foodType ?: FoodType.NON_VEG) }
         var selectedUnitType by remember { mutableStateOf(target?.unitType ?: UnitType.KG) }
         var discountType by remember { mutableStateOf(target?.catererDiscountType ?: com.example.data.models.DiscountType.PERCENTAGE) }
@@ -3591,10 +5311,37 @@ fun KitchenMenuManagementScreen(viewModel: CaterersViewModel) {
                             OutlinedTextField(
                                 value = minQtyStr,
                                 onValueChange = { minQtyStr = it },
-                                label = { Text("Min Order Qty") },
+                                label = { Text("Min Order Qty (${selectedUnitType.name})") },
                                 modifier = Modifier.weight(1f)
                             )
                         }
+
+                        // Quick Minimum Order Quantity presets
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Min:", fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = Color.Gray)
+                            listOf("0.5", "1", "2", "3", "5").forEach { preset ->
+                                val isSelected = minQtyStr.trim() == preset || minQtyStr.trim() == "$preset.0"
+                                Surface(
+                                    color = if (isSelected) SaffronPrimary else Color(0xFFF1F5F9),
+                                    shape = RoundedCornerShape(4.dp),
+                                    modifier = Modifier.clickable { minQtyStr = preset }
+                                ) {
+                                    Text(
+                                        text = "$preset ${selectedUnitType.name.lowercase()}",
+                                        fontSize = 10.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (isSelected) Color.White else Color(0xFF334155),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+                        Text("💡 Customer ko minimum yahi quantity dikhegi (is se kam order nahi hoga)", fontSize = 9.5.sp, color = Color.Gray)
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text("Food Type", fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -3767,6 +5514,304 @@ fun KitchenMenuManagementScreen(viewModel: CaterersViewModel) {
             }
         )
     }
+
+    // Add / Edit Catering Add-on Service Dialog
+    if (isAddAddonDialogOpen || editingAddon != null) {
+        EditAddonServiceDialog(
+            addOn = editingAddon,
+            onDismiss = {
+                isAddAddonDialogOpen = false
+                editingAddon = null
+            },
+            onSave = { savedAddon ->
+                if (editingAddon != null) {
+                    viewModel.updateAddonService(savedAddon)
+                    Toast.makeText(context, "✅ Add-on rates & package updated!", Toast.LENGTH_SHORT).show()
+                } else {
+                    viewModel.addCustomAddonService(savedAddon)
+                    Toast.makeText(context, "✅ New add-on service created!", Toast.LENGTH_SHORT).show()
+                }
+                isAddAddonDialogOpen = false
+                editingAddon = null
+            }
+        )
+    }
+
+    // Delete Add-on Confirmation Dialog
+    if (deletingAddon != null) {
+        val addOn = deletingAddon!!
+        AlertDialog(
+            onDismissRequest = { deletingAddon = null },
+            title = { Text("Delete '${addOn.name}'?") },
+            text = { Text("Are you sure you want to remove this add-on service package? Customers will no longer see this in their cart slider.", fontSize = 13.sp) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteAddonService(addOn.id)
+                        deletingAddon = null
+                        Toast.makeText(context, "🗑️ Add-on service deleted", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                ) {
+                    Text("Delete Service")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deletingAddon = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun EditAddonServiceDialog(
+    addOn: CateringAddOn?,
+    onDismiss: () -> Unit,
+    onSave: (CateringAddOn) -> Unit
+) {
+    val isEditing = addOn != null
+    var name by remember { mutableStateOf(addOn?.name ?: "") }
+    var hindiName by remember { mutableStateOf(addOn?.hindiName ?: "") }
+    var priceStr by remember { mutableStateOf(addOn?.price?.toInt()?.toString() ?: "250") }
+    var servesText by remember { mutableStateOf(addOn?.servesText ?: "Pack for 30 plates") }
+    var unit by remember { mutableStateOf(addOn?.unit ?: "Pack of 30") }
+    var description by remember { mutableStateOf(addOn?.description ?: "") }
+    var icon by remember { mutableStateOf(addOn?.icon ?: "🍽️") }
+    var isAvailable by remember { mutableStateOf(addOn?.isAvailable ?: true) }
+
+    val presetIcons = listOf("🧑‍🍳", "🥗", "🍽️", "🍬", "💧", "🔥", "🧊", "🪑", "☕", "🚚")
+    val presetPackages = listOf(
+        "Pack for 30 plates",
+        "Pack for 50 plates",
+        "Pack for 100 plates",
+        "Per 50-100 guests",
+        "Per 25-30 guests",
+        "Set for 50 guests"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    color = Color(0xFFFFF7ED),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(icon, fontSize = 22.sp)
+                    }
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        if (isEditing) "Edit Add-on Rates & Package" else "Add New Catering Add-on",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = Color(0xFF1E293B)
+                    )
+                    Text(
+                        "चार्ज (Price) व प्लेट्स क्वांटिटी खुद तय करें",
+                        fontSize = 11.sp,
+                        color = Color(0xFFB45309),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        },
+        text = {
+            LazyColumn(
+                modifier = Modifier.height(420.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                item {
+                    Text("Select Service Icon (आइकन चुनें)", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        presetIcons.forEach { ic ->
+                            Surface(
+                                color = if (icon == ic) AmberSecondary.copy(alpha = 0.35f) else Color(0xFFF8FAFC),
+                                shape = RoundedCornerShape(8.dp),
+                                border = if (icon == ic) androidx.compose.foundation.BorderStroke(1.5.dp, SaffronPrimary) else androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clickable { icon = ic }
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(ic, fontSize = 18.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Service Name (सेवा का नाम)") },
+                        placeholder = { Text("e.g. Disposable Plates & Tissue") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+
+                item {
+                    OutlinedTextField(
+                        value = hindiName,
+                        onValueChange = { hindiName = it },
+                        label = { Text("Hindi Title (हिंदी नाम)") },
+                        placeholder = { Text("e.g. डिस्पोजेबल प्लेट्स व चम्मच सेट") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = priceStr,
+                            onValueChange = { priceStr = it.filter { char -> char.isDigit() } },
+                            label = { Text("Charge Rate ₹ (रेट)") },
+                            placeholder = { Text("250") },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(8.dp),
+                            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number)
+                        )
+
+                        OutlinedTextField(
+                            value = servesText,
+                            onValueChange = { servesText = it },
+                            label = { Text("Plates / Package Qty") },
+                            placeholder = { Text("Pack for 30 plates") },
+                            modifier = Modifier.weight(1.3f),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                    }
+                }
+
+                item {
+                    Text("Quick Plate / Package Presets:", fontSize = 11.sp, color = Color.Gray)
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        presetPackages.forEach { preset ->
+                            Surface(
+                                color = if (servesText == preset) Color(0xFFFEF3C7) else Color(0xFFF1F5F9),
+                                shape = RoundedCornerShape(6.dp),
+                                border = if (servesText == preset) androidx.compose.foundation.BorderStroke(1.dp, SaffronPrimary) else null,
+                                modifier = Modifier.clickable {
+                                    servesText = preset
+                                    if (preset.startsWith("Pack for 30")) unit = "Pack of 30"
+                                    else if (preset.startsWith("Pack for 50")) unit = "Pack of 50"
+                                    else if (preset.startsWith("Pack for 100")) unit = "Pack of 100"
+                                    else if (preset.contains("guests")) unit = "Per Event"
+                                }
+                            ) {
+                                Text(
+                                    preset,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (servesText == preset) Color(0xFF78350F) else Color(0xFF334155),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    OutlinedTextField(
+                        value = unit,
+                        onValueChange = { unit = it },
+                        label = { Text("Unit Label (यूनिट - e.g. Pack of 30, 1 Staff)") },
+                        placeholder = { Text("Pack of 30") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+
+                item {
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = { Text("Description (विवरण)") },
+                        placeholder = { Text("Details of what is included in this package...") },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 3,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+
+                item {
+                    Surface(
+                        color = Color(0xFFF8FAFC),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("Active & Available for Booking", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("Customers can select this in Cart slider", fontSize = 10.sp, color = Color.Gray)
+                            }
+                            Switch(
+                                checked = isAvailable,
+                                onCheckedChange = { isAvailable = it },
+                                colors = SwitchDefaults.colors(checkedThumbColor = SaffronPrimary)
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val price = priceStr.toDoubleOrNull() ?: 0.0
+                    val updated = CateringAddOn(
+                        id = addOn?.id ?: "addon_${System.currentTimeMillis()}",
+                        name = name.ifBlank { "Catering Add-on" },
+                        hindiName = hindiName.ifBlank { "अतिरिक्त सेवा" },
+                        price = price,
+                        unit = unit.ifBlank { "1 Unit" },
+                        icon = icon,
+                        description = description.ifBlank { "Quality catering add-on service." },
+                        servesText = servesText.ifBlank { "Pack for plates" },
+                        isAvailable = isAvailable
+                    )
+                    onSave(updated)
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary)
+            ) {
+                Text(if (isEditing) "Save Rates & Package" else "Add Service Package")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable
@@ -4738,6 +6783,7 @@ private fun KycDocumentCard(
 
 @Composable
 fun KitchenSettingsScreen(viewModel: CaterersViewModel) {
+    val context = LocalContext.current
     val settings by viewModel.kitchenSettings.collectAsState()
 
     var isKitchenOpen by remember(settings) { mutableStateOf(settings.isKitchenOpen) }
@@ -4761,6 +6807,12 @@ fun KitchenSettingsScreen(viewModel: CaterersViewModel) {
     var catererDiscType by remember(settings) { mutableStateOf(settings.catererOrderDiscountType) }
     var catererDiscValueStr by remember(settings) { mutableStateOf(settings.catererOrderDiscountValue.toString()) }
     var catererMinOrderStr by remember(settings) { mutableStateOf(settings.catererMinOrderForDiscount.toString()) }
+
+    // Caterer Add-on Services Toggle (सिर्फ खाना बेचना है या ऐड-ऑन भी)
+    var offersAddonServices by remember(settings) { mutableStateOf(settings.offersAddonServices) }
+    val customAddonServices by viewModel.customAddonServices.collectAsState()
+    var editingAddonFromSettings by remember { mutableStateOf<CateringAddOn?>(null) }
+    var isAddAddonFromSettings by remember { mutableStateOf(false) }
 
     // Kitchen Food Serving Capacity Settings (1 Kg me kitne log khaenge)
     var biryaniPersonsStr by remember(settings) { mutableStateOf(String.format("%.1f", settings.biryaniPersonsPerKg)) }
@@ -5308,6 +7360,143 @@ fun KitchenSettingsScreen(viewModel: CaterersViewModel) {
             }
         }
 
+        // 5.8 Catering Event Add-on Services Option (सिर्फ खाना बेचना है या ऐड-ऑन भी)
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(12.dp),
+                elevation = CardDefaults.cardElevation(2.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(if (offersAddonServices) Color(0xFFFFF7ED) else Color(0xFFF0FDF4), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(if (offersAddonServices) "🛎️" else "🍲", fontSize = 18.sp)
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text("Catering Add-on Services (अतिरिक्त सुविधाएं)", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF1E293B))
+                                Text(
+                                    text = if (offersAddonServices) "स्टाफ हेल्पर, डिस्पोजेबल प्लेट्स, कचूमर/रायता व मुखवास उपलब्ध है"
+                                           else "केवल खाना बेचना है (Pure Food Only - No Add-on Services)",
+                                    fontSize = 11.5.sp,
+                                    color = if (offersAddonServices) SaffronPrimary else Color(0xFF166534),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = offersAddonServices,
+                            onCheckedChange = { offersAddonServices = it },
+                            colors = SwitchDefaults.colors(checkedThumbColor = SaffronPrimary, checkedTrackColor = AmberSecondary)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        color = Color(0xFFF8FAFC),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = if (offersAddonServices) "💡 ग्राहक कार्ट में खाना आर्डर करते समय स्टाफ हेल्पर, डिस्पोजेबल प्लेट्स और कचूमर सेट भी जोड़ सकते हैं।"
+                                   else "💡 अगर आप सिर्फ खाना बेचना चाहते हैं, तो यह विकल्प बंद रखें। ग्राहक को कार्ट में कोई ऐड-ऑन नहीं दिखेगा।",
+                            fontSize = 11.sp,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+
+                    if (offersAddonServices) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Divider()
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text("Add-on Rates & Plate Packages", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF78350F))
+                                Text("चार्ज (₹) व प्लेट्स क्वांटिटी बदलें", fontSize = 11.sp, color = Color.Gray)
+                            }
+                            Button(
+                                onClick = { isAddAddonFromSettings = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Text("+ Add Package", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        customAddonServices.forEach { addOn ->
+                            Surface(
+                                color = Color(0xFFFFFBEB),
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, Color(0xFFFED7AA)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                        Text(addOn.icon, fontSize = 22.sp)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column {
+                                            Text(addOn.name, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
+                                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                Text(
+                                                    "₹${addOn.price.toInt()} / ${addOn.unit}",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFFB45309)
+                                                )
+                                                Text(
+                                                    "• 📦 ${addOn.servesText}",
+                                                    fontSize = 11.sp,
+                                                    color = Color(0xFF475569)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = { editingAddonFromSettings = addOn },
+                                        shape = RoundedCornerShape(6.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                    ) {
+                                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(12.dp))
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text("Edit Rate", fontSize = 10.5.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // 6. Save Button
         item {
             Button(
@@ -5336,7 +7525,8 @@ fun KitchenSettingsScreen(viewModel: CaterersViewModel) {
                         biryaniPersonsPerKg = biryaniPersonsStr.toDoubleOrNull() ?: settings.biryaniPersonsPerKg,
                         sweetPersonsPerKg = sweetPersonsStr.toDoubleOrNull() ?: settings.sweetPersonsPerKg,
                         gravyPersonsPerKg = gravyPersonsStr.toDoubleOrNull() ?: settings.gravyPersonsPerKg,
-                        rotiPersonsPerUnit = (1.0 / rotisPerPerson.coerceAtLeast(0.1))
+                        rotiPersonsPerUnit = (1.0 / rotisPerPerson.coerceAtLeast(0.1)),
+                        offersAddonServices = offersAddonServices
                     )
                     viewModel.updateKitchenSettings(newConfig)
                 },
@@ -5353,5 +7543,27 @@ fun KitchenSettingsScreen(viewModel: CaterersViewModel) {
             }
             Spacer(modifier = Modifier.height(24.dp))
         }
+    }
+
+    // Add / Edit Add-on Dialog in Settings
+    if (isAddAddonFromSettings || editingAddonFromSettings != null) {
+        EditAddonServiceDialog(
+            addOn = editingAddonFromSettings,
+            onDismiss = {
+                isAddAddonFromSettings = false
+                editingAddonFromSettings = null
+            },
+            onSave = { savedAddon ->
+                if (editingAddonFromSettings != null) {
+                    viewModel.updateAddonService(savedAddon)
+                    Toast.makeText(context, "✅ Add-on rates & package updated!", Toast.LENGTH_SHORT).show()
+                } else {
+                    viewModel.addCustomAddonService(savedAddon)
+                    Toast.makeText(context, "✅ New add-on service created!", Toast.LENGTH_SHORT).show()
+                }
+                isAddAddonFromSettings = false
+                editingAddonFromSettings = null
+            }
+        )
     }
 }

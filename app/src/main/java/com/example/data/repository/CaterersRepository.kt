@@ -21,6 +21,9 @@ import com.example.data.models.UnitType
 import com.example.data.models.UserRole
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class CaterersRepository(private val dao: CaterersDao) {
 
@@ -111,7 +114,8 @@ class CaterersRepository(private val dao: CaterersDao) {
                     address = "78 Ring Road, Lajpat Nagar",
                     city = "New Delhi",
                     ownerMobile = "+91 9900112233",
-                    kycStatus = KycStatus.APPROVED
+                    kycStatus = KycStatus.APPROVED,
+                    offersAddonServices = false // Demonstrates caterer partner who only sells food (सिर्फ खाना बेचना है)
                 )
             )
             dao.insertCaterers(caterersList)
@@ -190,9 +194,11 @@ class CaterersRepository(private val dao: CaterersDao) {
 
             // Seed Delivery Boys
             val boys = listOf(
-                DeliveryBoyEntity("db_1", "caterer_1", "Ramesh Sharma", "+91 9811223344", "2345 6789 0123", true, true, false, 5, 1250.0, 2),
-                DeliveryBoyEntity("db_2", "caterer_1", "Imran Khan", "+91 9822334455", "3456 7890 1234", true, true, false, 3, 800.0, 1),
-                DeliveryBoyEntity("db_3", "caterer_1", "Aman Singh", "+91 9833445566", "4567 8901 2345", true, false, false, 0, 0.0, 0)
+                DeliveryBoyEntity("db_1", "caterer_1", "Ramesh Sharma", "+91 9811223344", "2345 6789 0123", "DL-0420190012345", true, true, false, 5, 1250.0, 2),
+                DeliveryBoyEntity("db_2", "caterer_1", "Imran Khan", "+91 9822334455", "3456 7890 1234", "", true, true, false, 3, 800.0, 1),
+                DeliveryBoyEntity("db_3", "caterer_1", "Aman Singh", "+91 9833445566", "4567 8901 2345", "DL-0720210087654", true, false, false, 0, 0.0, 0),
+                DeliveryBoyEntity("db_4", "caterer_2", "Shabbir Ahmed", "+91 9844556677", "5678 9012 3456", "DL-0520200054321", true, true, false, 4, 950.0, 1),
+                DeliveryBoyEntity("db_5", "caterer_2", "Sameer Malik", "+91 9855667788", "6789 0123 4567", "", true, true, false, 2, 500.0, 0)
             )
             for (boy in boys) dao.insertDeliveryBoy(boy)
 
@@ -249,10 +255,11 @@ class CaterersRepository(private val dao: CaterersDao) {
                 catererName = "A1 Huma Caterers",
                 itemsSummary = "Royal Hyderabadi Mutton Biryani (8.0 Kg)",
                 totalAmount = 5200.0,
-                advancePaidAmount = 1560.0,
-                balanceAmount = 3640.0,
+                advancePaidAmount = 2600.0,
+                balanceAmount = 2600.0,
                 paymentMethod = PaymentMethod.CASH_ON_DELIVERY,
-                paymentStatus = PaymentStatus.FULLY_SETTLED,
+                paymentStatus = PaymentStatus.BALANCE_PENDING,
+                isOfflineBooking = true,
                 orderStatus = OrderStatus.DELIVERED,
                 deliveryDate = "2026-07-24",
                 deliveryTimeSlot = "01:00 PM - 01:30 PM",
@@ -263,6 +270,8 @@ class CaterersRepository(private val dao: CaterersDao) {
                 isBartanPending = true,
                 bartanDescription = "3 Royal Biryani Degs",
                 isBartanReturned = false,
+                cashCollectedByDeliveryBoy = 2600.0,
+                isCashSubmittedToKitchen = false,
                 userRating = 5.0f,
                 userReview = "Flavours were superb! On-time delivery for my daughter's birthday."
             )
@@ -349,6 +358,34 @@ class CaterersRepository(private val dao: CaterersDao) {
                 bartanDescription = "6 Large Wedding Degs"
             )
 
+            val order8 = OrderEntity(
+                orderId = "CW-89182",
+                customerName = "Farhan Akhtar",
+                customerMobile = "+91 9822114455",
+                deliveryAddress = "Flat 402, Green Glen, Saket, New Delhi",
+                catererId = "caterer_1",
+                catererName = "A1 Huma Caterers",
+                itemsSummary = "Chicken Dum Biryani (10.0 Kg), Mutton Seekh Kebab (40 Pcs)",
+                totalAmount = 6400.0,
+                advancePaidAmount = 3200.0,
+                balanceAmount = 3200.0,
+                paymentMethod = PaymentMethod.CASH_ON_DELIVERY,
+                paymentStatus = PaymentStatus.FULLY_SETTLED,
+                isOfflineBooking = true,
+                orderStatus = OrderStatus.DELIVERED,
+                deliveryDate = "2026-07-23",
+                deliveryTimeSlot = "08:00 PM - 08:30 PM",
+                deliveryOtp = "4391",
+                deliveryBoyId = "db_2",
+                deliveryBoyName = "Imran Khan",
+                deliveryBoyMobile = "+91 9822334455",
+                isBartanPending = false,
+                bartanDescription = "4 Degs & Serving Trays",
+                isBartanReturned = true,
+                cashCollectedByDeliveryBoy = 3200.0,
+                isCashSubmittedToKitchen = true
+            )
+
             dao.insertOrder(order1)
             dao.insertOrder(order2)
             dao.insertOrder(order3)
@@ -356,18 +393,62 @@ class CaterersRepository(private val dao: CaterersDao) {
             dao.insertOrder(order5)
             dao.insertOrder(order6)
             dao.insertOrder(order7)
+            dao.insertOrder(order8)
 
-            // Seed Bartan Record
+            // Seed Bartan Records (Food Delivery Containers to be Returned - Not Rented)
             dao.insertBartanRecord(
                 BartanRecordEntity(
                     id = "b_1",
                     orderId = "CW-89198",
                     customerName = "Vikram Malhotra",
                     customerMobile = "+91 9711223344",
+                    customerAddress = "A-24 Rajouri Garden, New Delhi",
                     catererId = "caterer_1",
+                    catererName = "A1 Huma Caterers",
                     itemsDescription = "3 Royal Biryani Degs",
                     deliveryDate = "2026-07-24",
-                    isCollected = false
+                    deliveryBoyId = "db_1",
+                    deliveryBoyName = "Ramesh Sharma",
+                    deliveryBoyMobile = "+91 9811223344",
+                    isCollected = false,
+                    returnStatus = "PENDING"
+                )
+            )
+            dao.insertBartanRecord(
+                BartanRecordEntity(
+                    id = "b_2",
+                    orderId = "CW-89217",
+                    customerName = "Karan Oberoi",
+                    customerMobile = "+91 9811447788",
+                    customerAddress = "GK-2 Enclave, New Delhi",
+                    catererId = "caterer_1",
+                    catererName = "A1 Huma Caterers",
+                    itemsDescription = "3 Big Stainless Handis",
+                    deliveryDate = "2026-07-25",
+                    deliveryBoyId = "db_2",
+                    deliveryBoyName = "Suresh Verma",
+                    deliveryBoyMobile = "+91 9877001122",
+                    isCollected = false,
+                    returnStatus = "PENDING"
+                )
+            )
+            dao.insertBartanRecord(
+                BartanRecordEntity(
+                    id = "b_3",
+                    orderId = "CW-89182",
+                    customerName = "Farhan Akhtar",
+                    customerMobile = "+91 9822114455",
+                    customerAddress = "Flat 402, Green Glen, Saket, New Delhi",
+                    catererId = "caterer_1",
+                    catererName = "A1 Huma Caterers",
+                    itemsDescription = "4 Degs & Serving Trays",
+                    deliveryDate = "2026-07-23",
+                    deliveryBoyId = "db_2",
+                    deliveryBoyName = "Imran Khan",
+                    deliveryBoyMobile = "+91 9822334455",
+                    isCollected = true,
+                    collectedDate = "2026-07-24",
+                    returnStatus = "RETURNED_TO_KITCHEN"
                 )
             )
 
@@ -574,13 +655,20 @@ class CaterersRepository(private val dao: CaterersDao) {
         loyaltyDiscountAmount: Double = 0.0,
         redeemedLoyaltyPoints: Int = 0,
         earnedLoyaltyPoints: Int = 0,
-        isOfflineBooking: Boolean = false
+        isOfflineBooking: Boolean = false,
+        customAdvanceAmount: Double? = null
     ): String {
         val orderNum = (10000..99999).random()
         val orderId = "CW-$orderNum"
-        // 50% Advance Booking Token (as requested by user)
-        val advancePaid = if (is30PercentAdvance) totalAmount * 0.50 else totalAmount
-        val balance = totalAmount - advancePaid
+        // 50% Advance Booking Token or Custom/COD Advance
+        val advancePaid = if (customAdvanceAmount != null) {
+            customAdvanceAmount.coerceIn(0.0, totalAmount)
+        } else if (is30PercentAdvance) {
+            totalAmount * 0.50
+        } else {
+            totalAmount
+        }
+        val balance = (totalAmount - advancePaid).coerceAtLeast(0.0)
         val otp = (1000..9999).random().toString()
 
         val newOrder = OrderEntity(
@@ -595,8 +683,12 @@ class CaterersRepository(private val dao: CaterersDao) {
             advancePaidAmount = advancePaid,
             balanceAmount = balance,
             paymentMethod = paymentMethod,
-            paymentStatus = if (is30PercentAdvance) PaymentStatus.ADVANCE_PAID_50 else PaymentStatus.FULL_PAID,
-            orderStatus = OrderStatus.NEW,
+            paymentStatus = when {
+                balance <= 0.0 -> PaymentStatus.FULL_PAID
+                advancePaid <= 0.0 -> PaymentStatus.BALANCE_PENDING
+                else -> PaymentStatus.ADVANCE_PAID_30
+            },
+            orderStatus = OrderStatus.CONFIRMED,
             deliveryDate = deliveryDate,
             deliveryTimeSlot = deliveryTimeSlot,
             deliveryOtp = otp,
@@ -607,7 +699,7 @@ class CaterersRepository(private val dao: CaterersDao) {
             earnedLoyaltyPoints = earnedLoyaltyPoints,
             isOfflineBooking = isOfflineBooking,
             cashCollectedByDeliveryBoy = if (paymentMethod == PaymentMethod.CASH_ON_DELIVERY) balance else 0.0,
-            isCashSubmittedToKitchen = isOfflineBooking
+            isCashSubmittedToKitchen = if (paymentMethod == PaymentMethod.CASH_ON_DELIVERY && advancePaid == 0.0) false else isOfflineBooking
         )
 
         dao.insertOrder(newOrder)
@@ -708,13 +800,30 @@ class CaterersRepository(private val dao: CaterersDao) {
     suspend fun verifyOtpAndCompleteDelivery(orderId: String, enteredOtp: String, context: Context? = null): Boolean {
         val order = dao.getOrderById(orderId) ?: return false
         if (order.deliveryOtp == enteredOtp) {
-            dao.updateOrderStatusAndPayment(
-                orderId = orderId,
-                status = OrderStatus.DELIVERED,
-                paymentStatus = PaymentStatus.FULLY_SETTLED
-            )
+            val balanceToCollect = order.balanceAmount
+            if (balanceToCollect > 0.0) {
+                // Payment stays with Delivery Boy until Kitchen verifies and marks it received!
+                dao.updateOrderStatusAndPayment(
+                    orderId = orderId,
+                    status = OrderStatus.DELIVERED,
+                    paymentStatus = PaymentStatus.BALANCE_PENDING
+                )
+                dao.updateOrderCashCollected(orderId = orderId, cashAmount = balanceToCollect, submitted = false)
+            } else {
+                dao.updateOrderStatusAndPayment(
+                    orderId = orderId,
+                    status = OrderStatus.DELIVERED,
+                    paymentStatus = PaymentStatus.FULLY_SETTLED
+                )
+                dao.updateOrderCashSubmitted(orderId = orderId, submitted = true, paymentStatus = PaymentStatus.FULLY_SETTLED)
+            }
+
             val title = "Order Delivered! 🎉"
-            val message = "Order #${orderId} delivered successfully with verified OTP. Thank you!"
+            val message = if (balanceToCollect > 0.0) {
+                "Order #${orderId} delivered. Balance ₹${balanceToCollect.toInt()} cash collected by Delivery Boy."
+            } else {
+                "Order #${orderId} delivered successfully with verified OTP. Thank you!"
+            }
             dao.insertNotification(
                 NotificationEntity(
                     id = "n_${System.currentTimeMillis()}_del",
@@ -723,25 +832,88 @@ class CaterersRepository(private val dao: CaterersDao) {
                     targetRole = UserRole.CUSTOMER
                 )
             )
+
+            // Notify Kitchen that delivery is done and delivery boy is carrying cash
+            if (balanceToCollect > 0.0) {
+                dao.insertNotification(
+                    NotificationEntity(
+                        id = "n_${System.currentTimeMillis()}_cash_held",
+                        title = "💵 ₹${balanceToCollect.toInt()} Cash with Delivery Partner",
+                        message = "Delivery boy ${order.deliveryBoyName ?: "Partner"} collected balance 50% cash (₹${balanceToCollect.toInt()}) for #${orderId}. Pending deposit to kitchen cashier.",
+                        targetRole = UserRole.KITCHEN
+                    )
+                )
+            }
+
             if (context != null) {
                 NotificationHelper.showSystemNotification(context, title, message)
             }
-            // Add Bartan Record
+            // Add Bartan Record for delivery container return (food container to be returned, not for rent)
             dao.insertBartanRecord(
                 BartanRecordEntity(
                     id = "b_${System.currentTimeMillis()}",
                     orderId = orderId,
                     customerName = order.customerName,
                     customerMobile = order.customerMobile,
+                    customerAddress = order.deliveryAddress,
                     catererId = order.catererId,
+                    catererName = order.catererName,
                     itemsDescription = order.bartanDescription,
                     deliveryDate = order.deliveryDate,
-                    isCollected = false
+                    deliveryBoyId = order.deliveryBoyId ?: "",
+                    deliveryBoyName = order.deliveryBoyName ?: "Delivery Partner",
+                    deliveryBoyMobile = order.deliveryBoyMobile ?: "",
+                    isCollected = false,
+                    returnStatus = "PENDING"
                 )
             )
             return true
         }
         return false
+    }
+
+    suspend fun markCashReceivedByKitchen(orderId: String, context: Context? = null) {
+        val order = dao.getOrderById(orderId) ?: return
+        dao.updateOrderCashSubmitted(orderId = orderId, submitted = true, paymentStatus = PaymentStatus.FULLY_SETTLED)
+
+        val title = "💵 Cash Received & Verified!"
+        val message = "Kitchen has confirmed receiving ₹${order.balanceAmount.toInt()} cash from Delivery Boy ${order.deliveryBoyName ?: "Partner"} for Order #${orderId}."
+        dao.insertNotification(
+            NotificationEntity(
+                id = "n_cash_recv_${orderId}_${System.currentTimeMillis()}",
+                title = title,
+                message = message,
+                targetRole = UserRole.KITCHEN
+            )
+        )
+        dao.insertNotification(
+            NotificationEntity(
+                id = "n_cash_db_${orderId}_${System.currentTimeMillis()}",
+                title = "💵 Cash Handover Accepted!",
+                message = "Kitchen cashier confirmed receiving ₹${order.balanceAmount.toInt()} for Order #${orderId}. Your liability is settled ✅",
+                targetRole = UserRole.DELIVERY_BOY
+            )
+        )
+        if (context != null) {
+            NotificationHelper.showSystemNotification(context, title, message)
+        }
+    }
+
+    suspend fun deliveryBoyNotifyCashHandover(orderId: String, context: Context? = null) {
+        val order = dao.getOrderById(orderId) ?: return
+        val title = "🛵 Cash Handover Arrived at Kitchen"
+        val message = "${order.deliveryBoyName ?: "Delivery Boy"} is at the kitchen with ₹${order.balanceAmount.toInt()} cash for Order #${orderId}. Please accept & mark received."
+        dao.insertNotification(
+            NotificationEntity(
+                id = "n_cash_arrived_${orderId}_${System.currentTimeMillis()}",
+                title = title,
+                message = message,
+                targetRole = UserRole.KITCHEN
+            )
+        )
+        if (context != null) {
+            NotificationHelper.showSystemNotification(context, title, message)
+        }
     }
 
     suspend fun updateCatererBookingStatus(catererId: String, isOpen: Boolean) {
@@ -832,8 +1004,173 @@ class CaterersRepository(private val dao: CaterersDao) {
         dao.insertDeliveryBoy(boy)
     }
 
+    suspend fun updateDeliveryBoy(boy: DeliveryBoyEntity) {
+        dao.updateDeliveryBoy(boy)
+    }
+
+    suspend fun deleteDeliveryBoy(boyId: String, kitchenId: String) {
+        dao.deleteDeliveryBoy(boyId, kitchenId)
+    }
+
+    fun getDeliveryBoysByKitchen(kitchenId: String): Flow<List<DeliveryBoyEntity>> {
+        return dao.getDeliveryBoysByKitchen(kitchenId)
+    }
+
     suspend fun updateBartanCollected(id: String, isCollected: Boolean, date: String) {
-        dao.updateBartanCollected(id, isCollected, date)
+        dao.updateBartanCollectedFull(id, isCollected, date, if (isCollected) "RETURNED_TO_KITCHEN" else "PENDING")
+        val bartans = dao.getAllBartanRecords().first()
+        val target = bartans.find { it.id == id }
+        if (target != null) {
+            dao.updateBartanStatus(target.orderId, isCollected)
+        }
+    }
+
+    suspend fun updateBartanCollectedWithStatus(id: String, isCollected: Boolean, date: String, status: String) {
+        dao.updateBartanCollectedFull(id, isCollected, date, status)
+    }
+
+    fun getBartanRecordsByDeliveryBoy(deliveryBoyId: String): Flow<List<BartanRecordEntity>> {
+        return dao.getBartanRecordsByDeliveryBoy(deliveryBoyId)
+    }
+
+    /**
+     * 9:30 AM Daily Morning Container Return Notification Trigger
+     * Sends notification to the Kitchen whose containers are pending,
+     * AND to the specific Delivery Boy who delivered the order.
+     */
+    suspend fun trigger930AmBartanMorningAlert(context: Context?): Int {
+        val pendingList = dao.getPendingBartanRecordsList()
+        if (pendingList.isEmpty()) return 0
+
+        val todayDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+
+        // 1. Group by Caterer / Kitchen
+        val byCaterer = pendingList.groupBy { it.catererId }
+        byCaterer.forEach { (catererId, records) ->
+            val kitchenName = records.firstOrNull()?.catererName.takeIf { !it.isNullOrBlank() } ?: "Catering Kitchen"
+            val totalPending = records.size
+            val summary = records.joinToString("\n") { 
+                "• Order #${it.orderId}: ${it.itemsDescription} at ${it.customerName} (${it.customerMobile}) [Delivered by: ${it.deliveryBoyName}]" 
+            }
+
+            val title = "⏰ 9:30 AM Deg/Bartan Alert: $totalPending Return Pending!"
+            val message = "Kitchen: $kitchenName • Food delivery degs/containers are pending collection. Assigned delivery boys have been notified."
+
+            dao.insertNotification(
+                NotificationEntity(
+                    id = "n_930_kit_${catererId}_${System.currentTimeMillis()}",
+                    title = title,
+                    message = "$message\n\n$summary",
+                    targetRole = UserRole.KITCHEN
+                )
+            )
+
+            if (context != null) {
+                NotificationHelper.show930AmBartanAlertForKitchen(
+                    context = context,
+                    kitchenName = kitchenName,
+                    pendingCount = totalPending,
+                    detailSummary = summary
+                )
+            }
+        }
+
+        // 2. Group by Delivery Boy who delivered the food
+        val byDeliveryBoy = pendingList.groupBy { it.deliveryBoyId }
+        byDeliveryBoy.forEach { (boyId, records) ->
+            val boyName = records.firstOrNull()?.deliveryBoyName.takeIf { !it.isNullOrBlank() } ?: "Delivery Partner"
+            val ordersListText = records.joinToString(", ") { "#${it.orderId} (${it.customerName})" }
+
+            val title = "🛵 9:30 AM Pickup Task: Collect ${records.size} Deg/Bartan"
+            val message = "$boyName, you delivered containers for orders: $ordersListText. Please collect them and return to the respective kitchen(s)."
+
+            dao.insertNotification(
+                NotificationEntity(
+                    id = "n_930_boy_${boyId}_${System.currentTimeMillis()}",
+                    title = title,
+                    message = message,
+                    targetRole = UserRole.DELIVERY_BOY
+                )
+            )
+
+            records.forEach { rec ->
+                if (context != null) {
+                    NotificationHelper.show930AmBartanAlertForDeliveryBoy(
+                        context = context,
+                        deliveryBoyName = boyName,
+                        customerName = rec.customerName,
+                        utensilDescription = rec.itemsDescription,
+                        address = rec.customerAddress,
+                        catererName = rec.catererName
+                    )
+                }
+                dao.updateBartanMorningAlert(rec.id, true, todayDate)
+            }
+        }
+
+        return pendingList.size
+    }
+
+    suspend fun sendManualContainerReminderToDeliveryBoy(
+        bartanRecordId: String?,
+        orderId: String,
+        deliveryBoyId: String,
+        deliveryBoyName: String,
+        deliveryBoyMobile: String,
+        customerName: String,
+        customerMobile: String,
+        customerAddress: String,
+        containerDescription: String,
+        catererName: String = "A1 Huma Caterers",
+        daysOverdue: Int = 1,
+        context: Context? = null
+    ): Boolean {
+        val boyDisplayName = deliveryBoyName.ifBlank { "Delivery Partner" }
+        val title = "🚨 URGENT: Overdue Deg/Bartan Alert ($daysOverdue Days Late)"
+        val message = "Hey $boyDisplayName! Order #$orderId containers ($containerDescription) at $customerName ($customerMobile, $customerAddress) are OVERDUE for return to $catererName. Please collect and return immediately."
+
+        // 1. Insert notification for Delivery Boy
+        dao.insertNotification(
+            NotificationEntity(
+                id = "n_remind_boy_${deliveryBoyId.ifBlank { orderId }}_${System.currentTimeMillis()}",
+                title = title,
+                message = message,
+                targetRole = UserRole.DELIVERY_BOY
+            )
+        )
+
+        // 2. Insert notification log for Kitchen
+        dao.insertNotification(
+            NotificationEntity(
+                id = "n_remind_kit_${orderId}_${System.currentTimeMillis()}",
+                title = "🔔 Overdue Reminder Sent to $boyDisplayName",
+                message = "Manual overdue alert sent to $boyDisplayName for Order #$orderId ($containerDescription). Customer: $customerName ($customerMobile).",
+                targetRole = UserRole.KITCHEN
+            )
+        )
+
+        // 3. Android System Notification
+        if (context != null) {
+            NotificationHelper.showOverdueContainerReminderForDeliveryBoy(
+                context = context,
+                deliveryBoyName = boyDisplayName,
+                customerName = customerName,
+                customerMobile = customerMobile,
+                customerAddress = customerAddress,
+                utensilDescription = containerDescription,
+                orderId = orderId,
+                catererName = catererName,
+                daysOverdue = daysOverdue
+            )
+        }
+
+        // 4. Update alert timestamp in bartan record if it exists
+        if (!bartanRecordId.isNullOrBlank()) {
+            val todayDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+            dao.updateBartanMorningAlert(bartanRecordId, true, todayDate)
+        }
+
+        return true
     }
 
     suspend fun submitOrderReview(orderId: String, rating: Float, review: String) {
