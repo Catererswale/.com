@@ -58,6 +58,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.util.LocalizationManager
 import androidx.compose.material.icons.filled.ExitToApp
 import com.example.data.models.FoodType
 import com.example.data.models.Language
@@ -107,7 +108,7 @@ fun RoleSelectorBar(
                             color = SaffronPrimary
                         ) {
                             Text(
-                                text = currentRole.name.replace("_", " "),
+                                text = LocalizationManager.getRoleBadge(currentRole, currentLanguage),
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
@@ -143,7 +144,7 @@ fun RoleSelectorBar(
                                 )
                                 Spacer(modifier = Modifier.width(3.dp))
                                 Text(
-                                    text = "Logout",
+                                    text = LocalizationManager.getLogoutText(currentLanguage),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
@@ -183,28 +184,28 @@ fun RoleSelectorBar(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 RoleChip(
-                    label = "Customer",
+                    label = LocalizationManager.getRoleLabel(UserRole.CUSTOMER, currentLanguage),
                     icon = Icons.Default.Person,
                     isSelected = currentRole == UserRole.CUSTOMER,
                     onClick = { onRoleSelected(UserRole.CUSTOMER) },
                     testTag = "role_customer"
                 )
                 RoleChip(
-                    label = "Kitchen",
+                    label = LocalizationManager.getRoleLabel(UserRole.KITCHEN, currentLanguage),
                     icon = Icons.Default.Kitchen,
                     isSelected = currentRole == UserRole.KITCHEN,
                     onClick = { onRoleSelected(UserRole.KITCHEN) },
                     testTag = "role_kitchen"
                 )
                 RoleChip(
-                    label = "Delivery",
+                    label = LocalizationManager.getRoleLabel(UserRole.DELIVERY_BOY, currentLanguage),
                     icon = Icons.Default.DeliveryDining,
                     isSelected = currentRole == UserRole.DELIVERY_BOY,
                     onClick = { onRoleSelected(UserRole.DELIVERY_BOY) },
                     testTag = "role_delivery"
                 )
                 RoleChip(
-                    label = "Admin",
+                    label = LocalizationManager.getRoleLabel(UserRole.SUPER_ADMIN, currentLanguage),
                     icon = Icons.Default.AdminPanelSettings,
                     isSelected = currentRole == UserRole.SUPER_ADMIN,
                     onClick = { onRoleSelected(UserRole.SUPER_ADMIN) },
@@ -286,7 +287,7 @@ fun VegNonVegBadge(foodType: FoodType, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun FssaiBadge(licenseNo: String, modifier: Modifier = Modifier) {
+fun FssaiBadge(licenseNo: String, modifier: Modifier = Modifier, language: Language = Language.ENGLISH) {
     Surface(
         color = Color(0xFFE8F5E9),
         shape = RoundedCornerShape(4.dp),
@@ -304,7 +305,7 @@ fun FssaiBadge(licenseNo: String, modifier: Modifier = Modifier) {
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text(
-                text = "FSSAI Verified #$licenseNo",
+                text = LocalizationManager.getFssaiVerified(licenseNo, language),
                 fontSize = 10.sp,
                 color = Color(0xFF1B5E20),
                 fontWeight = FontWeight.Bold

@@ -98,6 +98,7 @@ fun AdminAddKitchenPartnerScreen(
     var emailAddress by remember { mutableStateOf("") }
     var cuisineSpecialties by remember { mutableStateOf("") }
     var selectedFoodType by remember { mutableStateOf(FoodType.NON_VEG) }
+    var selectedDietaryType by remember { mutableStateOf("BOTH") } // "PURE_VEG", "BOTH", "NON_VEG"
     var city by remember { mutableStateOf("New Delhi") }
     var fullAddress by remember { mutableStateOf("") }
     var minOrderAmountText by remember { mutableStateOf("1500") }
@@ -247,7 +248,8 @@ fun AdminAddKitchenPartnerScreen(
             kycNotes = kycNotes.trim(),
             onlineCommissionPercentage = onlineCommissionPercent,
             offlineCommissionPercentage = offlineCommissionPercent,
-            isOfflineBookingEnabled = isOfflineBookingEnabled
+            isOfflineBookingEnabled = isOfflineBookingEnabled,
+            dietaryType = selectedDietaryType
         )
 
         validationError = null
@@ -433,31 +435,50 @@ fun AdminAddKitchenPartnerScreen(
                         singleLine = true
                     )
 
-                    // Food Type Selector
+                    // Dietary Specialization Selector
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Food Category", fontSize = 11.sp, color = Color.Gray)
+                        Text("Kitchen Specialization / खान-पान", fontSize = 11.sp, color = Color.Gray)
                         Spacer(modifier = Modifier.height(4.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             FilterChip(
-                                selected = selectedFoodType == FoodType.VEG,
-                                onClick = { selectedFoodType = FoodType.VEG },
-                                label = { Text("Veg 🌿", fontSize = 11.sp) },
+                                selected = selectedDietaryType == "PURE_VEG",
+                                onClick = {
+                                    selectedDietaryType = "PURE_VEG"
+                                    selectedFoodType = FoodType.VEG
+                                },
+                                label = { Text("Pure Veg 🌿", fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold) },
                                 modifier = Modifier.weight(1f),
                                 colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = VegGreen.copy(alpha = 0.15f),
+                                    selectedContainerColor = VegGreen.copy(alpha = 0.2f),
                                     selectedLabelColor = VegGreen
                                 )
                             )
                             FilterChip(
-                                selected = selectedFoodType == FoodType.NON_VEG,
-                                onClick = { selectedFoodType = FoodType.NON_VEG },
-                                label = { Text("Non-Veg 🍗", fontSize = 11.sp) },
+                                selected = selectedDietaryType == "BOTH",
+                                onClick = {
+                                    selectedDietaryType = "BOTH"
+                                    selectedFoodType = FoodType.NON_VEG
+                                },
+                                label = { Text("Both 🟢🔴", fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold) },
                                 modifier = Modifier.weight(1f),
                                 colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = NonVegRed.copy(alpha = 0.15f),
+                                    selectedContainerColor = SaffronPrimary.copy(alpha = 0.2f),
+                                    selectedLabelColor = SaffronPrimary
+                                )
+                            )
+                            FilterChip(
+                                selected = selectedDietaryType == "NON_VEG",
+                                onClick = {
+                                    selectedDietaryType = "NON_VEG"
+                                    selectedFoodType = FoodType.NON_VEG
+                                },
+                                label = { Text("Non-Veg 🍗", fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold) },
+                                modifier = Modifier.weight(1f),
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = NonVegRed.copy(alpha = 0.2f),
                                     selectedLabelColor = NonVegRed
                                 )
                             )

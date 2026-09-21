@@ -1,6 +1,7 @@
 package com.example.ui.customer
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -171,6 +172,8 @@ fun LiveTrackingScreen(
 
     var showOrderDetailsSheet by remember { mutableStateOf(false) }
     var showDemoSimulationControls by remember { mutableStateOf(true) }
+    var showCancellationDialog by remember { mutableStateOf(false) }
+    var showRescheduleDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -311,34 +314,81 @@ fun LiveTrackingScreen(
                 )
             }
 
-            // 9. Interactive Live Testing / Simulation Bar (Advance Order Status in Real-Time)
-            item {
-                DemoStatusSimulationBar(
-                    currentStatus = order.orderStatus,
-                    onSelectStatus = { newStatus ->
-                        viewModel.updateOrderStatus(order.orderId, newStatus)
-                        if (newStatus == OrderStatus.DELIVERED) {
-                            onOpenDeliveredView()
-                        }
-                    },
-                    onAssignDefaultDriver = {
-                        val firstDriver = deliveryBoys.firstOrNull()
-                        if (firstDriver != null) {
-                            viewModel.assignDeliveryBoy(order.orderId, firstDriver)
-                        } else {
-                            viewModel.showFeedback("Assigning Valet Zaid Khan to order...")
-                        }
-                    }
-                )
-            }
-
-            // 10. 24x7 Catering Hotline & Help Desk
+            // 9. 24x7 Catering Hotline & Help Desk
             item {
                 EmergencyHelplineCard(
                     onCallSupport = { viewModel.showFeedback("Connecting to 24x7 Caterers Wale VIP Support: 1800-419-CATER") }
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(10.dp))
             }
+
+            // 11. Cancellation & Reschedule Action Card
+            if (order.orderStatus != OrderStatus.DELIVERED &&
+                order.orderStatus != OrderStatus.CANCELLED &&
+                order.orderStatus != OrderStatus.OUT_FOR_DELIVERY &&
+                !order.isNonCancellable
+            ) {
+                item {
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                                    Text("Change of Plans? (तारीख या रद्द करें)", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = Color(0xFF0F172A))
+                                    Text("Check 3-tier refund policy or reschedule within 7 days", fontSize = 10.5.sp, color = Color(0xFF64748B))
+                                }
+                                OutlinedButton(
+                                    onClick = { showCancellationDialog = true },
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFDC2626)),
+                                    border = BorderStroke(1.dp, Color(0xFFFCA5A5)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.testTag("tracking_cancel_order_btn")
+                                ) {
+                                    Text("Cancel / Reschedule", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+            }
+        }
+
+        // Customer Cancellation Dialog
+        if (showCancellationDialog) {
+            CustomerCancellationDialog(
+                order = order,
+                onDismiss = { showCancellationDialog = false },
+                onConfirmCancel = { reason ->
+                    viewModel.cancelOrderByCustomer(order.orderId, reason)
+                    showCancellationDialog = false
+                    onBack()
+                },
+                onSwitchToReschedule = {
+                    showCancellationDialog = false
+                    showRescheduleDialog = true
+                }
+            )
+        }
+
+        // Customer Reschedule Dialog
+        if (showRescheduleDialog) {
+            CustomerRescheduleDialog(
+                order = order,
+                onDismiss = { showRescheduleDialog = false },
+                onConfirmReschedule = { newDate, newSlot ->
+                    viewModel.rescheduleOrderByCustomer(order.orderId, newDate, newSlot)
+                    showRescheduleDialog = false
+                }
+            )
         }
     }
 }
@@ -1479,101 +1529,6 @@ private fun CateringOrderSummaryCard(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun DemoStatusSimulationBar(
-    currentStatus: OrderStatus,
-    onSelectStatus: (OrderStatus) -> Unit,
-    onAssignDefaultDriver: () -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
-        shape = RoundedCornerShape(16.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDE68A))
-    ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Speed, contentDescription = null, tint = Color(0xFFD97706), modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Live Status Simulator (Demo Tool)",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        color = Color(0xFF92400E)
-                    )
-                }
-                Surface(color = Color(0xFFB45309), shape = RoundedCornerShape(4.dp)) {
-                    Text(
-                        text = "TESTING",
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Tap any pipeline stage below to test real-time customer screen updates:",
-                fontSize = 11.sp,
-                color = Color(0xFF78350F)
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            val scrollState = rememberScrollState()
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(scrollState),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                StatusSimChip("📋 Accepted", OrderStatus.ACCEPTED, currentStatus) { onSelectStatus(OrderStatus.ACCEPTED) }
-                StatusSimChip("🔥 Cooking", OrderStatus.PREPARING, currentStatus) { onSelectStatus(OrderStatus.PREPARING) }
-                StatusSimChip("📦 Packed", OrderStatus.READY, currentStatus) { onSelectStatus(OrderStatus.READY) }
-                StatusSimChip("🛵 Assigned", OrderStatus.ASSIGNED_DELIVERY, currentStatus) {
-                    onAssignDefaultDriver()
-                    onSelectStatus(OrderStatus.ASSIGNED_DELIVERY)
-                }
-                StatusSimChip("🚚 En-Route", OrderStatus.OUT_FOR_DELIVERY, currentStatus) { onSelectStatus(OrderStatus.OUT_FOR_DELIVERY) }
-                StatusSimChip("✅ Deliver", OrderStatus.DELIVERED, currentStatus) { onSelectStatus(OrderStatus.DELIVERED) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun StatusSimChip(
-    label: String,
-    status: OrderStatus,
-    currentStatus: OrderStatus,
-    onClick: () -> Unit
-) {
-    val isSelected = currentStatus == status
-    Surface(
-        color = if (isSelected) SaffronPrimary else Color.White,
-        shape = RoundedCornerShape(20.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) SaffronPrimary else Color(0xFFD1D5DB)),
-        modifier = Modifier
-            .clickable { onClick() }
-            .testTag("sim_chip_${status.name}")
-    ) {
-        Text(
-            text = label,
-            fontSize = 11.sp,
-            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-            color = if (isSelected) Color.White else Color(0xFF1E293B),
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-        )
     }
 }
 

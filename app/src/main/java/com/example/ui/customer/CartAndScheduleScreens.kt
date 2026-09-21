@@ -97,11 +97,11 @@ fun CartScreen(
     var promoInput by remember { mutableStateOf("") }
     var isRedeemingLoyalty by remember { mutableStateOf(false) }
 
-    // Date and Time Slot selection inside Cart
+    // Date and Time Slot selection inside Cart (evaluated in IST)
     val dateList = remember {
-        val calendar = Calendar.getInstance()
-        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH)
-        val displayFormatter = SimpleDateFormat("EEE, dd MMM", Locale.ENGLISH)
+        val calendar = TimeSlotUtils.getIndianCalendar()
+        val formatter = TimeSlotUtils.createDateFormat("yyyy-MM-dd")
+        val displayFormatter = TimeSlotUtils.createDateFormat("EEE, dd MMM")
         val list = mutableListOf<Pair<String, String>>()
         for (i in 0..29) {
             val dateStr = formatter.format(calendar.time)
@@ -111,7 +111,7 @@ fun CartScreen(
         }
         list
     }
-    var selectedDatePair by remember { mutableStateOf(dateList.getOrElse(1) { dateList.first() }) } // Default tomorrow for catering
+    var selectedDatePair by remember { mutableStateOf(dateList.first()) } // Default Today
     val configuredSlots = remember(settings) {
         if (settings.deliveryTimeSlots.isNotEmpty()) settings.deliveryTimeSlots else listOf(
             "11:30 AM - 02:00 PM (Lunch Dawat)",
@@ -653,38 +653,61 @@ fun CartScreen(
                                 Text("Select Delivery Time Slot:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF475569))
                                 Spacer(modifier = Modifier.height(6.dp))
 
-                                configuredSlots.forEach { slot ->
-                                    val isSlotSelected = slot == selectedTimeSlot
+                                if (availableSlots.isEmpty()) {
                                     Surface(
-                                        color = if (isSlotSelected) Color(0xFFFFF7ED) else Color(0xFFF8FAFC),
+                                        color = Color(0xFFFFF1F2),
                                         shape = RoundedCornerShape(10.dp),
-                                        border = androidx.compose.foundation.BorderStroke(
-                                            1.2.dp,
-                                            if (isSlotSelected) SaffronPrimary else Color(0xFFE2E8F0)
-                                        ),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 3.dp)
-                                            .clickable { selectedTimeSlot = slot }
-                                            .testTag("slot_chip_$slot")
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFECDD3)),
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                                     ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            RadioButton(
-                                                selected = isSlotSelected,
-                                                onClick = { selectedTimeSlot = slot },
-                                                colors = RadioButtonDefaults.colors(selectedColor = SaffronPrimary),
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(8.dp))
+                                        Column(modifier = Modifier.padding(12.dp)) {
                                             Text(
-                                                text = slot,
-                                                fontSize = 12.sp,
-                                                fontWeight = if (isSlotSelected) FontWeight.Bold else FontWeight.Normal,
-                                                color = if (isSlotSelected) Color(0xFF9A3412) else Color(0xFF1E293B)
+                                                "⚠️ All slots closed for today",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 12.5.sp,
+                                                color = Color(0xFFBE123C)
                                             )
+                                            Text(
+                                                "Please select tomorrow or a future date for catering booking.",
+                                                fontSize = 11.sp,
+                                                color = Color(0xFF475569)
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    availableSlots.forEach { slot ->
+                                        val isSlotSelected = slot == selectedTimeSlot
+                                        Surface(
+                                            color = if (isSlotSelected) Color(0xFFFFF7ED) else Color(0xFFF8FAFC),
+                                            shape = RoundedCornerShape(10.dp),
+                                            border = androidx.compose.foundation.BorderStroke(
+                                                1.2.dp,
+                                                if (isSlotSelected) SaffronPrimary else Color(0xFFE2E8F0)
+                                            ),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 3.dp)
+                                                .clickable { selectedTimeSlot = slot }
+                                                .testTag("slot_chip_$slot")
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                RadioButton(
+                                                    selected = isSlotSelected,
+                                                    onClick = { selectedTimeSlot = slot },
+                                                    colors = RadioButtonDefaults.colors(selectedColor = SaffronPrimary),
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(
+                                                    text = slot,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = if (isSlotSelected) FontWeight.Bold else FontWeight.Normal,
+                                                    color = if (isSlotSelected) Color(0xFF9A3412) else Color(0xFF1E293B)
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -1011,6 +1034,7 @@ fun CartScreen(
                         }
 
                         Button(
+                            enabled = availableSlots.isNotEmpty() && selectedTimeSlot.isNotBlank(),
                             onClick = { onProceedToSchedule(is50PercentAdvance, selectedDatePair.first, selectedTimeSlot) },
                             colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
                             shape = RoundedCornerShape(12.dp),
@@ -1089,9 +1113,9 @@ fun DeliveryScheduleScreen(
     val settings by viewModel.kitchenSettings.collectAsState()
 
     val dateList = remember {
-        val calendar = Calendar.getInstance()
-        val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.ENGLISH)
-        val displayFormatter = SimpleDateFormat("EEE, dd MMM", Locale.ENGLISH)
+        val calendar = TimeSlotUtils.getIndianCalendar()
+        val formatter = TimeSlotUtils.createDateFormat("yyyy-MM-dd")
+        val displayFormatter = TimeSlotUtils.createDateFormat("EEE, dd MMM")
         val list = mutableListOf<Pair<String, String>>()
         for (i in 0..29) {
             val dateStr = formatter.format(calendar.time)

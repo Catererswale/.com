@@ -10,6 +10,7 @@ import com.example.data.models.CartItemEntity
 import com.example.data.models.CatererEntity
 import com.example.data.models.DeliveryBoyEntity
 import com.example.data.models.FavoriteKitchenEntity
+import com.example.data.models.KitchenUtensilEntity
 import com.example.data.models.MenuItemEntity
 import com.example.data.models.NotificationEntity
 import com.example.data.models.OrderEntity
@@ -85,6 +86,9 @@ interface CaterersDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrder(order: OrderEntity)
 
+    @Update
+    suspend fun updateOrder(order: OrderEntity)
+
     @Query("UPDATE orders SET orderStatus = :status WHERE orderId = :orderId")
     suspend fun updateOrderStatus(orderId: String, status: OrderStatus)
 
@@ -93,6 +97,15 @@ interface CaterersDao {
 
     @Query("UPDATE orders SET deliveryBoyId = :boyId, deliveryBoyName = :boyName, deliveryBoyMobile = :boyMobile, orderStatus = :status WHERE orderId = :orderId")
     suspend fun assignDeliveryBoy(orderId: String, boyId: String, boyName: String, boyMobile: String, status: OrderStatus)
+
+    @Query("UPDATE orders SET deliveryBoyId = :boyId, deliveryBoyName = :boyName, deliveryBoyMobile = :boyMobile, orderStatus = :status, bartanDescription = :bartanDescription, isBartanPending = :isBartanPending WHERE orderId = :orderId")
+    suspend fun assignDeliveryBoyWithBartan(orderId: String, boyId: String, boyName: String, boyMobile: String, status: OrderStatus, bartanDescription: String, isBartanPending: Boolean)
+
+    @Query("UPDATE delivery_boys SET pendingBartanCount = pendingBartanCount + :bartanCount, isBusy = 1 WHERE id = :boyId")
+    suspend fun incrementDeliveryBoyBartanCount(boyId: String, bartanCount: Int)
+
+    @Query("SELECT * FROM bartan_records WHERE orderId = :orderId LIMIT 1")
+    suspend fun getBartanRecordByOrderId(orderId: String): BartanRecordEntity?
 
     @Query("UPDATE orders SET userRating = :rating, userReview = :review WHERE orderId = :orderId")
     suspend fun updateOrderReview(orderId: String, rating: Float, review: String)
@@ -149,6 +162,22 @@ interface CaterersDao {
 
     @Query("UPDATE bartan_records SET morningAlertSent = :alertSent, lastMorningAlertDate = :alertDate WHERE id = :id")
     suspend fun updateBartanMorningAlert(id: String, alertSent: Boolean, alertDate: String)
+
+    @Query("UPDATE bartan_records SET pickupBoyId = :pickupBoyId, pickupBoyName = :pickupBoyName, pickupBoyMobile = :pickupBoyMobile, returnStatus = :status WHERE id = :id")
+    suspend fun updateBartanPickupBoy(id: String, pickupBoyId: String, pickupBoyName: String, pickupBoyMobile: String, status: String)
+
+    // Kitchen Utensils Master (Stock Hisaab)
+    @Query("SELECT * FROM kitchen_utensils_master WHERE kitchenId = :kitchenId ORDER BY name ASC")
+    fun getUtensilsByKitchen(kitchenId: String): Flow<List<KitchenUtensilEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertUtensil(utensil: KitchenUtensilEntity)
+
+    @Update
+    suspend fun updateUtensil(utensil: KitchenUtensilEntity)
+
+    @Query("DELETE FROM kitchen_utensils_master WHERE id = :id")
+    suspend fun deleteUtensil(id: String)
 
     // Notifications
     @Query("SELECT * FROM app_notifications ORDER BY timestamp DESC")

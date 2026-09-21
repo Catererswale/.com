@@ -48,6 +48,9 @@ import androidx.compose.material.icons.filled.SoupKitchen
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.ViewAgenda
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.AlertDialog
@@ -55,6 +58,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -63,6 +68,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -83,6 +90,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.models.BartanRecordEntity
 import com.example.data.models.DeliveryBoyEntity
+import com.example.data.models.KitchenUtensilEntity
 import com.example.data.models.OrderEntity
 import com.example.data.models.PaymentMethod
 import com.example.data.repository.CaterersViewModel
@@ -106,6 +114,14 @@ data class ContainerCashSummaryRow(
     val deliveryBoyName: String,
     val deliveryBoyMobile: String,
     val deliveryBoyId: String,
+    // Re-assigned Pickup Boy tracking
+    val pickupBoyName: String = "",
+    val pickupBoyMobile: String = "",
+    val pickupBoyId: String = "",
+    // Utensil Quantities for Stock Subtraction
+    val handiCount: Int = 2,
+    val spoonsCount: Int = 2,
+    val boxesCount: Int = 1,
     // Container Information
     val hasContainer: Boolean,
     val containerRecordId: String?,
@@ -125,6 +141,20 @@ data class ContainerCashSummaryRow(
 )
 
 /**
+ * Grouped liability summary for a delivery boy
+ */
+data class DeliveryBoyGroupSummary(
+    val boyId: String,
+    val boyName: String,
+    val boyMobile: String,
+    val totalOrders: Int,
+    val pendingHandis: Int,
+    val pendingCash: Double,
+    val overdueCount: Int,
+    val orders: List<ContainerCashSummaryRow>
+)
+
+/**
  * Dedicated Dashboard Screen for the Kitchen role that displays a summary table
  * of pending containers and cash, allowing the kitchen to manually mark items as
  * 'returned' or 'received' to update the status.
@@ -138,6 +168,7 @@ fun KitchenPendingContainersCashDashboardScreen(
     val bartanRecords by viewModel.bartanRecordsList.collectAsState()
     val allOrders by viewModel.ordersList.collectAsState()
     val allDeliveryBoys by viewModel.deliveryBoysList.collectAsState()
+    val kitchenUtensils by viewModel.kitchenUtensilsList.collectAsState()
 
     val myDeliveryBoys = remember(allDeliveryBoys) {
         allDeliveryBoys.filter { it.kitchenId == "caterer_1" }
@@ -145,10 +176,16 @@ fun KitchenPendingContainersCashDashboardScreen(
 
     // View mode: "TABLE" (tabular horizontal grid) or "CARDS" (compact card list)
     var isTableView by remember { mutableStateOf(true) }
+    // Group By Mode: "ORDER" (Order-wise view) or "DELIVERY_BOY" (Grouped by Valet)
+    var groupByMode by remember { mutableStateOf("ORDER") }
 
     // Filter selection: ALL, PENDING_ALL, PENDING_CONTAINERS, PENDING_CASH, BOTH_PENDING, SETTLED
     var filterType by remember { mutableStateOf("PENDING_ALL") }
     var searchQuery by remember { mutableStateOf("") }
+
+    // Utensil Stock & Re-assign States
+    var showManageUtensilsDialog by remember { mutableStateOf(false) }
+    var rowToReassignPickup by remember { mutableStateOf<ContainerCashSummaryRow?>(null) }
 
     // Confirmation dialog states for manual actions
     var containerToMarkReturned by remember { mutableStateOf<ContainerCashSummaryRow?>(null) }
@@ -189,6 +226,12 @@ fun KitchenPendingContainersCashDashboardScreen(
                         deliveryBoyName = order.deliveryBoyName ?: matchingBartan?.deliveryBoyName ?: "Unassigned",
                         deliveryBoyMobile = order.deliveryBoyMobile ?: matchingBartan?.deliveryBoyMobile ?: "",
                         deliveryBoyId = order.deliveryBoyId ?: matchingBartan?.deliveryBoyId ?: "",
+                        pickupBoyName = matchingBartan?.pickupBoyName ?: "",
+                        pickupBoyMobile = matchingBartan?.pickupBoyMobile ?: "",
+                        pickupBoyId = matchingBartan?.pickupBoyId ?: "",
+                        handiCount = matchingBartan?.handiCount ?: 2,
+                        spoonsCount = matchingBartan?.spoonsCount ?: 2,
+                        boxesCount = matchingBartan?.boxesCount ?: 1,
                         hasContainer = hasContainer,
                         containerRecordId = matchingBartan?.id,
                         containerDescription = containerDesc,
@@ -224,6 +267,12 @@ fun KitchenPendingContainersCashDashboardScreen(
                         deliveryBoyName = record.deliveryBoyName.ifBlank { "Unassigned" },
                         deliveryBoyMobile = record.deliveryBoyMobile,
                         deliveryBoyId = record.deliveryBoyId,
+                        pickupBoyName = record.pickupBoyName,
+                        pickupBoyMobile = record.pickupBoyMobile,
+                        pickupBoyId = record.pickupBoyId,
+                        handiCount = record.handiCount,
+                        spoonsCount = record.spoonsCount,
+                        boxesCount = record.boxesCount,
                         hasContainer = true,
                         containerRecordId = record.id,
                         containerDescription = record.itemsDescription,
@@ -267,6 +316,28 @@ fun KitchenPendingContainersCashDashboardScreen(
 
             matchesFilter && matchesSearch
         }
+    }
+
+    // Delivery Boy Grouped Summaries (Aggregated Pending Handi & 50% Cash by Valet)
+    val deliveryBoyGroups = remember(filteredRows) {
+        filteredRows.groupBy { it.deliveryBoyName.ifBlank { "Unassigned" } }
+            .map { (boyName, rows) ->
+                val boyId = rows.firstOrNull { it.deliveryBoyId.isNotBlank() }?.deliveryBoyId ?: ""
+                val boyMobile = rows.firstOrNull { it.deliveryBoyMobile.isNotBlank() }?.deliveryBoyMobile ?: ""
+                val pendingHandis = rows.filter { it.hasContainer && !it.isContainerCollected }.sumOf { it.handiCount }
+                val pendingCash = rows.filter { it.hasCash && !it.isCashSubmitted }.sumOf { it.cashAmount }
+                val overdue = rows.count { it.isOverdue }
+                DeliveryBoyGroupSummary(
+                    boyId = boyId,
+                    boyName = boyName,
+                    boyMobile = boyMobile,
+                    totalOrders = rows.size,
+                    pendingHandis = pendingHandis,
+                    pendingCash = pendingCash,
+                    overdueCount = overdue,
+                    orders = rows
+                )
+            }.sortedByDescending { it.pendingCash + (it.pendingHandis * 500) }
     }
 
     // Live KPI Counters
@@ -613,6 +684,37 @@ fun KitchenPendingContainersCashDashboardScreen(
         )
     }
 
+    // Re-assign Bartan Pickup Boy Dialog
+    if (rowToReassignPickup != null) {
+        KitchenReassignPickupBoyDialog(
+            row = rowToReassignPickup!!,
+            allDeliveryBoys = allDeliveryBoys,
+            context = context,
+            onDismiss = { rowToReassignPickup = null },
+            onConfirmReassign = { newBoy ->
+                viewModel.reassignBartanPickupBoy(
+                    recordId = rowToReassignPickup!!.containerRecordId ?: rowToReassignPickup!!.orderId,
+                    newBoy = newBoy,
+                    customerName = rowToReassignPickup!!.customerName,
+                    handiCount = rowToReassignPickup!!.handiCount
+                )
+                rowToReassignPickup = null
+            }
+        )
+    }
+
+    // Utensils Stock Master Management Dialog
+    if (showManageUtensilsDialog) {
+        KitchenManageUtensilsInventoryDialog(
+            utensils = kitchenUtensils,
+            allRows = allRows,
+            onDismiss = { showManageUtensilsDialog = false },
+            onUpdateUtensil = { updatedUtensil ->
+                viewModel.saveOrUpdateUtensil(updatedUtensil)
+            }
+        )
+    }
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -697,6 +799,16 @@ fun KitchenPendingContainersCashDashboardScreen(
                 }
             }
 
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        // 1.5 Bartan Stock Master & Live Circulation Status
+        item {
+            KitchenUtensilsStockMasterCard(
+                kitchenUtensils = kitchenUtensils,
+                allRows = allRows,
+                onManageStock = { showManageUtensilsDialog = true }
+            )
             Spacer(modifier = Modifier.height(12.dp))
         }
 
@@ -998,35 +1110,81 @@ fun KitchenPendingContainersCashDashboardScreen(
 
                     Spacer(modifier = Modifier.width(6.dp))
 
-                    // Layout Mode Switcher (Table vs Card view)
-                    Surface(
-                        color = Color(0xFFF1F5F9),
-                        shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(1.dp, Color(0xFFCBD5E1))
+                    // Layout Mode Switcher (Table vs Card view - active when in Order-wise mode)
+                    if (groupByMode == "ORDER") {
+                        Surface(
+                            color = Color(0xFFF1F5F9),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, Color(0xFFCBD5E1))
+                        ) {
+                            Row(modifier = Modifier.padding(2.dp)) {
+                                IconButton(
+                                    onClick = { isTableView = true },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.TableChart,
+                                        contentDescription = "Table View",
+                                        tint = if (isTableView) SaffronPrimary else Color.Gray,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { isTableView = false },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.ViewAgenda,
+                                        contentDescription = "Cards View",
+                                        tint = if (!isTableView) SaffronPrimary else Color.Gray,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Group-by Mode Switcher: [📋 By Order] vs [🛵 By Delivery Boy]
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .background(Color(0xFFF1F5F9), RoundedCornerShape(8.dp))
+                            .padding(3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Row(modifier = Modifier.padding(2.dp)) {
-                            IconButton(
-                                onClick = { isTableView = true },
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.TableChart,
-                                    contentDescription = "Table View",
-                                    tint = if (isTableView) SaffronPrimary else Color.Gray,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
-                            IconButton(
-                                onClick = { isTableView = false },
-                                modifier = Modifier.size(28.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.ViewAgenda,
-                                    contentDescription = "Cards View",
-                                    tint = if (!isTableView) SaffronPrimary else Color.Gray,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            }
+                        Surface(
+                            color = if (groupByMode == "ORDER") SaffronPrimary else Color.Transparent,
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.clickable { groupByMode = "ORDER" }
+                        ) {
+                            Text(
+                                "📋 Order-wise (${filteredRows.size})",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (groupByMode == "ORDER") Color.White else Color(0xFF475569),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            )
+                        }
+
+                        Surface(
+                            color = if (groupByMode == "DELIVERY_BOY") SaffronPrimary else Color.Transparent,
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.clickable { groupByMode = "DELIVERY_BOY" }
+                        ) {
+                            Text(
+                                "🛵 By Delivery Boy (${deliveryBoyGroups.size})",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (groupByMode == "DELIVERY_BOY") Color.White else Color(0xFF475569),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            )
                         }
                     }
                 }
@@ -1035,7 +1193,7 @@ fun KitchenPendingContainersCashDashboardScreen(
             Spacer(modifier = Modifier.height(10.dp))
         }
 
-        // 4. Content: Empty State or Summary Table / Cards
+        // 4. Content: Empty State or Summary Table / Cards / Delivery Boy Groups
         if (filteredRows.isEmpty()) {
             item {
                 Card(
@@ -1080,6 +1238,21 @@ fun KitchenPendingContainersCashDashboardScreen(
                     }
                 }
             }
+        } else if (groupByMode == "DELIVERY_BOY") {
+            // ==================== DELIVERY BOY GROUPED VIEW ====================
+            items(deliveryBoyGroups) { group ->
+                DeliveryBoyGroupCard(
+                    group = group,
+                    context = context,
+                    allDeliveryBoys = allDeliveryBoys,
+                    onViewDetails = { row -> selectedOrderDetailsRow = row },
+                    onMarkReturned = { row -> containerToMarkReturned = row },
+                    onMarkReceived = { row -> cashToMarkReceived = row },
+                    onSendReminder = { row -> reminderTargetRow = row },
+                    onReassignPickup = { row -> rowToReassignPickup = row }
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+            }
         } else if (isTableView) {
             // ==================== SUMMARY DATA TABLE VIEW ====================
             item {
@@ -1113,7 +1286,8 @@ fun KitchenPendingContainersCashDashboardScreen(
                                         onViewDetails = { selectedOrderDetailsRow = row },
                                         onMarkReturned = { containerToMarkReturned = row },
                                         onMarkReceived = { cashToMarkReceived = row },
-                                        onSendReminder = { reminderTargetRow = row }
+                                        onSendReminder = { reminderTargetRow = row },
+                                        onReassignPickup = { rowToReassignPickup = row }
                                     )
                                     if (index < filteredRows.size - 1) {
                                         HorizontalDivider(color = Color(0xFFF1F5F9), thickness = 1.dp)
@@ -1159,7 +1333,8 @@ fun KitchenPendingContainersCashDashboardScreen(
                     onViewDetails = { selectedOrderDetailsRow = row },
                     onMarkReturned = { containerToMarkReturned = row },
                     onMarkReceived = { cashToMarkReceived = row },
-                    onSendReminder = { reminderTargetRow = row }
+                    onSendReminder = { reminderTargetRow = row },
+                    onReassignPickup = { rowToReassignPickup = row }
                 )
                 Spacer(modifier = Modifier.height(10.dp))
             }
@@ -1202,7 +1377,8 @@ private fun TableDataRow(
     onViewDetails: () -> Unit,
     onMarkReturned: () -> Unit,
     onMarkReceived: () -> Unit,
-    onSendReminder: () -> Unit
+    onSendReminder: () -> Unit,
+    onReassignPickup: () -> Unit
 ) {
     val bgColor = if (index % 2 == 0) Color.White else Color(0xFFFBFDFF)
 
@@ -1291,6 +1467,18 @@ private fun TableDataRow(
                 }
                 if (row.deliveryBoyMobile.isNotBlank()) {
                     Text("📞 ${row.deliveryBoyMobile}", fontSize = 9.5.sp, color = Color.Gray)
+                }
+                if (row.pickupBoyName.isNotBlank() && row.pickupBoyName != row.deliveryBoyName) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Surface(color = Color(0xFFFEF3C7), shape = RoundedCornerShape(4.dp)) {
+                        Text(
+                            "🔄 Pickup: ${row.pickupBoyName}",
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF92400E),
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                        )
+                    }
                 }
             }
         }
@@ -1429,6 +1617,18 @@ private fun TableDataRow(
                         Text("🍲 Mark Returned", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
                     }
 
+                    // Button 1A: Re-assign Pickup Boy
+                    OutlinedButton(
+                        onClick = onReassignPickup,
+                        shape = RoundedCornerShape(6.dp),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(11.dp), tint = SaffronPrimary)
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text("🔄 Re-assign Pickup", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = SaffronPrimary)
+                    }
+
                     // Button 1B: Overdue Manual Reminder Button to Delivery Boy
                     if (row.isOverdue) {
                         Button(
@@ -1493,7 +1693,8 @@ private fun SummaryCardItem(
     onViewDetails: () -> Unit,
     onMarkReturned: () -> Unit,
     onMarkReceived: () -> Unit,
-    onSendReminder: () -> Unit
+    onSendReminder: () -> Unit,
+    onReassignPickup: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -1537,14 +1738,28 @@ private fun SummaryCardItem(
                     Text(row.eventDate.ifBlank { "Event Order" }, fontSize = 11.sp, color = Color.Gray)
                 }
 
-                // Delivery Boy chip
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.clickable { onViewDetails() }
-                ) {
-                    Icon(Icons.Default.DeliveryDining, contentDescription = null, tint = Color(0xFF2563EB), modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(row.deliveryBoyName, fontWeight = FontWeight.SemiBold, fontSize = 11.5.sp, color = Color(0xFF1E293B))
+                // Delivery Boy chip & Pickup Boy chip
+                Column(horizontalAlignment = Alignment.End) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable { onViewDetails() }
+                    ) {
+                        Icon(Icons.Default.DeliveryDining, contentDescription = null, tint = Color(0xFF2563EB), modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(row.deliveryBoyName, fontWeight = FontWeight.SemiBold, fontSize = 11.5.sp, color = Color(0xFF1E293B))
+                    }
+                    if (row.pickupBoyName.isNotBlank() && row.pickupBoyName != row.deliveryBoyName) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Surface(color = Color(0xFFFEF3C7), shape = RoundedCornerShape(4.dp)) {
+                            Text(
+                                "🔄 Pickup: ${row.pickupBoyName}",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF92400E),
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1685,6 +1900,28 @@ private fun SummaryCardItem(
                             "🔔 Send Overdue Reminder to ${row.deliveryBoyName.ifBlank { "Delivery Boy" }}",
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
+
+                // Re-assign Pickup Boy Button
+                if (row.hasContainer && !row.isContainerCollected) {
+                    OutlinedButton(
+                        onClick = onReassignPickup,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp)
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(13.dp), tint = SaffronPrimary)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            if (row.pickupBoyName.isNotBlank() && row.pickupBoyName != row.deliveryBoyName)
+                                "🔄 Re-assign Pickup (Current: ${row.pickupBoyName})"
+                            else "🔄 Re-assign Bartan Pickup Boy",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SaffronPrimary
                         )
                     }
                     Spacer(modifier = Modifier.height(6.dp))
@@ -2676,3 +2913,832 @@ private data class Quad<A, B, C, D>(
     val third: C,
     val fourth: D
 )
+
+// -------------------------------------------------------------
+// KITCHEN UTENSILS STOCK MASTER CARD COMPOSABLE
+// -------------------------------------------------------------
+@Composable
+fun KitchenUtensilsStockMasterCard(
+    kitchenUtensils: List<KitchenUtensilEntity>,
+    allRows: List<ContainerCashSummaryRow>,
+    onManageStock: () -> Unit
+) {
+    val pendingRows = allRows.filter { it.hasContainer && !it.isContainerCollected }
+    val handisOutside = pendingRows.sumOf { it.handiCount }
+    val spoonsOutside = pendingRows.sumOf { it.spoonsCount }
+    val boxesOutside = pendingRows.sumOf { it.boxesCount }
+
+    val handiEntity = kitchenUtensils.find { it.name.contains("Handi", ignoreCase = true) }
+    val totalHandi = handiEntity?.totalStock ?: 50
+    val availableHandi = (totalHandi - handisOutside).coerceAtLeast(0)
+
+    val spoonEntity = kitchenUtensils.find { it.name.contains("Chammach", ignoreCase = true) || it.name.contains("Spoon", ignoreCase = true) }
+    val totalSpoons = spoonEntity?.totalStock ?: 80
+    val availableSpoons = (totalSpoons - spoonsOutside).coerceAtLeast(0)
+
+    val boxEntity = kitchenUtensils.find { it.name.contains("Box", ignoreCase = true) }
+    val totalBoxes = boxEntity?.totalStock ?: 40
+    val availableBoxes = (totalBoxes - boxesOutside).coerceAtLeast(0)
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, Color(0xFFCBD5E1))
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        color = SaffronPrimary.copy(alpha = 0.12f),
+                        shape = CircleShape,
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text("🍲", fontSize = 16.sp)
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            "Bartan Master Stock & Live Circulation",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = Color(0xFF0F172A)
+                        )
+                        Text(
+                            "Live tracking: Kitchen Stock vs Bahar Market me Bartan",
+                            fontSize = 10.sp,
+                            color = Color(0xFF64748B)
+                        )
+                    }
+                }
+
+                OutlinedButton(
+                    onClick = onManageStock,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    border = BorderStroke(1.dp, SaffronPrimary)
+                ) {
+                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(12.dp), tint = SaffronPrimary)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Stock Update", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = SaffronPrimary)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                UtensilStockMiniCard(
+                    modifier = Modifier.weight(1f),
+                    icon = "🍲",
+                    name = "Biryani Handi",
+                    total = totalHandi,
+                    outside = handisOutside,
+                    available = availableHandi,
+                    warningThreshold = 10
+                )
+                UtensilStockMiniCard(
+                    modifier = Modifier.weight(1f),
+                    icon = "🥄",
+                    name = "Bada Chammach",
+                    total = totalSpoons,
+                    outside = spoonsOutside,
+                    available = availableSpoons,
+                    warningThreshold = 15
+                )
+                UtensilStockMiniCard(
+                    modifier = Modifier.weight(1f),
+                    icon = "🥗",
+                    name = "Kachumber Box",
+                    total = totalBoxes,
+                    outside = boxesOutside,
+                    available = availableBoxes,
+                    warningThreshold = 10
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun UtensilStockMiniCard(
+    modifier: Modifier = Modifier,
+    icon: String,
+    name: String,
+    total: Int,
+    outside: Int,
+    available: Int,
+    warningThreshold: Int
+) {
+    val isLow = available <= warningThreshold
+    Surface(
+        modifier = modifier,
+        color = if (isLow) Color(0xFFFEF2F2) else Color(0xFFF8FAFC),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(1.dp, if (isLow) Color(0xFFFCA5A5) else Color(0xFFE2E8F0))
+    ) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("$icon $name", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (isLow) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Surface(color = Color(0xFFFEE2E2), shape = RoundedCornerShape(3.dp)) {
+                    Text("⚠️ LOW STOCK", fontSize = 8.sp, fontWeight = FontWeight.Black, color = Color(0xFFDC2626), modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp))
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Total:", fontSize = 9.5.sp, color = Color(0xFF64748B))
+                Text("$total", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E293B))
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Bahar:", fontSize = 9.5.sp, color = Color(0xFFDC2626))
+                Text("$outside", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFFDC2626))
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Kitchen:", fontSize = 9.5.sp, color = VegGreen)
+                Text("$available", fontSize = 10.5.sp, fontWeight = FontWeight.Black, color = if (isLow) Color(0xFFDC2626) else VegGreen)
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// DELIVERY BOY GROUP CARD COMPOSABLE
+// -------------------------------------------------------------
+@Composable
+private fun DeliveryBoyGroupCard(
+    group: DeliveryBoyGroupSummary,
+    context: android.content.Context,
+    allDeliveryBoys: List<DeliveryBoyEntity>,
+    onViewDetails: (ContainerCashSummaryRow) -> Unit,
+    onMarkReturned: (ContainerCashSummaryRow) -> Unit,
+    onMarkReceived: (ContainerCashSummaryRow) -> Unit,
+    onSendReminder: (ContainerCashSummaryRow) -> Unit,
+    onReassignPickup: (ContainerCashSummaryRow) -> Unit
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, if (group.overdueCount > 0) Color(0xFFFECACA) else Color(0xFFCBD5E1))
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            // Header Row: Delivery Boy details & Aggregate Stats
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isExpanded = !isExpanded },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        color = Color(0xFFEFF6FF),
+                        shape = CircleShape,
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.DeliveryDining, contentDescription = null, tint = Color(0xFF2563EB), modifier = Modifier.size(22.dp))
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            group.boyName,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.5.sp,
+                            color = Color(0xFF0F172A)
+                        )
+                        if (group.boyMobile.isNotBlank()) {
+                            Text("📞 ${group.boyMobile}", fontSize = 10.5.sp, color = Color(0xFF64748B))
+                        }
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Quick Call Boy Button
+                    if (group.boyMobile.isNotBlank()) {
+                        IconButton(
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${group.boyMobile}"))
+                                context.startActivity(intent)
+                            },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(Icons.Default.Call, contentDescription = "Call Boy", tint = VegGreen, modifier = Modifier.size(16.dp))
+                        }
+                    }
+
+                    // Share WhatsApp Hisaab Button
+                    IconButton(
+                        onClick = {
+                            val boyText = StringBuilder().apply {
+                                append("🛵 *A1 Huma Kitchen - Delivery Boy Hisaab: ${group.boyName}*\n")
+                                append("Pending Handis: ${group.pendingHandis} | Pending Cash: ₹${group.pendingCash.toInt()}\n\n")
+                                group.orders.forEachIndexed { i, o ->
+                                    append("${i + 1}. Order #${o.orderId} - ${o.customerName}\n")
+                                    append("   📍 ${o.deliveryAddress}\n")
+                                    append("   📞 ${o.customerMobile}\n")
+                                    if (o.hasContainer && !o.isContainerCollected) {
+                                        append("   🍲 Bartan: ${o.handiCount} Handi, ${o.spoonsCount} Spoons\n")
+                                    }
+                                    if (o.hasCash && !o.isCashSubmitted) {
+                                        append("   💵 Cash: ₹${o.cashAmount.toInt()}\n")
+                                    }
+                                    append("\n")
+                                }
+                                append("Kripya kitchen aakar jama karein.")
+                            }.toString()
+
+                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                putExtra(Intent.EXTRA_TEXT, boyText)
+                                type = "text/plain"
+                            }
+                            context.startActivity(Intent.createChooser(sendIntent, "Share Boy Hisaab"))
+                        },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = "Share Hisaab", tint = SaffronPrimary, modifier = Modifier.size(16.dp))
+                    }
+
+                    IconButton(
+                        onClick = { isExpanded = !isExpanded },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = "Expand",
+                            tint = Color.Gray
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Metrics Row for this boy
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Surface(
+                    color = Color(0xFFFEF3C7),
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("🍲", fontSize = 11.sp)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            "${group.pendingHandis} Handi Bahar",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF92400E)
+                        )
+                    }
+                }
+
+                Surface(
+                    color = Color(0xFFEFF6FF),
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("💵", fontSize = 11.sp)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            "₹${group.pendingCash.toInt()} Pending Cash",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1E40AF)
+                        )
+                    }
+                }
+
+                if (group.overdueCount > 0) {
+                    Surface(
+                        color = Color(0xFFFEE2E2),
+                        shape = RoundedCornerShape(6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("🚨", fontSize = 11.sp)
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                "${group.overdueCount} Overdue",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFFDC2626)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Expanded Order List for this delivery boy
+            if (isExpanded) {
+                Spacer(modifier = Modifier.height(10.dp))
+                HorizontalDivider(color = Color(0xFFF1F5F9))
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    "Assigned Orders (${group.orders.size}):",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.5.sp,
+                    color = Color(0xFF475569)
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (row in group.orders) {
+                        Surface(
+                            color = Color(0xFFF8FAFC),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("#${row.orderId} • ${row.customerName}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF0F172A))
+                                    if (row.customerMobile.isNotBlank()) {
+                                        IconButton(
+                                            onClick = {
+                                                val dial = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${row.customerMobile}"))
+                                                context.startActivity(dial)
+                                            },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(Icons.Default.Call, contentDescription = "Call Customer", tint = VegGreen, modifier = Modifier.size(14.dp))
+                                        }
+                                    }
+                                }
+
+                                Text(row.deliveryAddress, fontSize = 10.sp, color = Color(0xFF64748B), maxLines = 1, overflow = TextOverflow.Ellipsis)
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    if (row.hasContainer) {
+                                        Text(
+                                            "🍲 ${row.handiCount}H, ${row.spoonsCount}S • ${if (row.isContainerCollected) "✅ Returned" else "⏳ Bahar"}",
+                                            fontSize = 9.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (row.isContainerCollected) VegGreen else Color(0xFF92400E)
+                                        )
+                                    }
+                                    if (row.hasCash) {
+                                        Text(
+                                            "💵 ₹${row.cashAmount.toInt()} • ${if (row.isCashSubmitted) "✅ Paid" else "⏳ With Boy"}",
+                                            fontSize = 9.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = if (row.isCashSubmitted) VegGreen else Color(0xFF1E40AF)
+                                        )
+                                    }
+                                }
+
+                                if (row.pickupBoyName.isNotBlank() && row.pickupBoyName != row.deliveryBoyName) {
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Surface(color = Color(0xFFFEF3C7), shape = RoundedCornerShape(4.dp)) {
+                                        Text("🔄 Pickup assigned to: ${row.pickupBoyName}", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF92400E), modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    if (row.hasContainer && !row.isContainerCollected) {
+                                        Button(
+                                            onClick = { onMarkReturned(row) },
+                                            modifier = Modifier.weight(1f),
+                                            colors = ButtonDefaults.buttonColors(containerColor = VegGreen),
+                                            shape = RoundedCornerShape(6.dp),
+                                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 3.dp)
+                                        ) {
+                                            Text("🍲 Returned", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        }
+
+                                        OutlinedButton(
+                                            onClick = { onReassignPickup(row) },
+                                            modifier = Modifier.weight(1f),
+                                            shape = RoundedCornerShape(6.dp),
+                                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 3.dp)
+                                        ) {
+                                            Text("🔄 Re-assign", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = SaffronPrimary)
+                                        }
+                                    }
+
+                                    if (row.hasCash && !row.isCashSubmitted) {
+                                        Button(
+                                            onClick = { onMarkReceived(row) },
+                                            modifier = Modifier.weight(1f),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E40AF)),
+                                            shape = RoundedCornerShape(6.dp),
+                                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 3.dp)
+                                        ) {
+                                            Text("💵 Cash Mila", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = { onViewDetails(row) },
+                                        shape = RoundedCornerShape(6.dp),
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 3.dp)
+                                    ) {
+                                        Text("Details", fontSize = 10.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------
+// RE-ASSIGN BARTAN PICKUP BOY DIALOG
+// -------------------------------------------------------------
+@Composable
+private fun KitchenReassignPickupBoyDialog(
+    row: ContainerCashSummaryRow,
+    allDeliveryBoys: List<DeliveryBoyEntity>,
+    context: android.content.Context,
+    onDismiss: () -> Unit,
+    onConfirmReassign: (DeliveryBoyEntity) -> Unit
+) {
+    var selectedBoyId by remember {
+        mutableStateOf(
+            if (row.pickupBoyName.isNotBlank()) {
+                allDeliveryBoys.find { it.name == row.pickupBoyName }?.id ?: (allDeliveryBoys.firstOrNull()?.id ?: "")
+            } else {
+                allDeliveryBoys.firstOrNull { it.name != row.deliveryBoyName }?.id ?: (allDeliveryBoys.firstOrNull()?.id ?: "")
+            }
+        )
+    }
+    var sendWhatsAppNotification by remember { mutableStateOf(true) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    color = SaffronPrimary.copy(alpha = 0.12f),
+                    shape = CircleShape,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text("🔄", fontSize = 16.sp)
+                    }
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text("Re-assign Pickup Valet", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("Bartan Retrieval Delegation", fontSize = 10.5.sp, color = Color.Gray)
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+            ) {
+                // Order context summary
+                Surface(
+                    color = Color(0xFFF8FAFC),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text("Order #${row.orderId} • ${row.customerName}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF0F172A))
+                        Text("📍 ${row.deliveryAddress}", fontSize = 10.sp, color = Color(0xFF64748B), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("🍲 Bartan: ${row.handiCount} Handi, ${row.spoonsCount} Spoons, ${row.boxesCount} Boxes", fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF92400E))
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text("Original Delivery: ${row.deliveryBoyName}", fontSize = 10.sp, color = Color(0xFF475569))
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                Text("Chuniye kis boy ko Bartan Pickup assign karna hai:", fontWeight = FontWeight.Bold, fontSize = 11.5.sp, color = Color(0xFF1E293B))
+                Spacer(modifier = Modifier.height(6.dp))
+
+                if (allDeliveryBoys.isEmpty()) {
+                    Text("Koi Delivery Boy register nahi hai.", fontSize = 11.sp, color = Color.Red)
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        allDeliveryBoys.forEach { boy ->
+                            val isSelected = boy.id == selectedBoyId
+                            Surface(
+                                color = if (isSelected) Color(0xFFEFF6FF) else Color.White,
+                                shape = RoundedCornerShape(6.dp),
+                                border = BorderStroke(1.dp, if (isSelected) Color(0xFF3B82F6) else Color(0xFFE2E8F0)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { selectedBoyId = boy.id }
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(
+                                        selected = isSelected,
+                                        onClick = { selectedBoyId = boy.id },
+                                        colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF2563EB))
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            boy.name,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            fontSize = 12.sp,
+                                            color = Color(0xFF1E293B)
+                                        )
+                                        if (boy.mobile.isNotBlank()) {
+                                            Text("📞 ${boy.mobile}", fontSize = 10.sp, color = Color.Gray)
+                                        }
+                                    }
+                                    if (boy.name == row.deliveryBoyName) {
+                                        Surface(color = Color(0xFFF1F5F9), shape = RoundedCornerShape(4.dp)) {
+                                            Text("Original Delivery", fontSize = 8.5.sp, color = Color.Gray, modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { sendWhatsAppNotification = !sendWhatsAppNotification },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = sendWhatsAppNotification,
+                        onCheckedChange = { sendWhatsAppNotification = it },
+                        colors = CheckboxDefaults.colors(checkedColor = VegGreen)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        "WhatsApp par naye boy ko pickup task ka message bhejein",
+                        fontSize = 11.sp,
+                        color = Color(0xFF334155)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val chosenBoy = allDeliveryBoys.find { it.id == selectedBoyId }
+                    if (chosenBoy != null) {
+                        onConfirmReassign(chosenBoy)
+                        if (sendWhatsAppNotification && chosenBoy.mobile.isNotBlank()) {
+                            val msg = "Salam ${chosenBoy.name} bhai,\n" +
+                                "Kitchen se aapko Bartan Pickup task assign hua hai:\n" +
+                                "📦 Order #${row.orderId}\n" +
+                                "👤 Customer: ${row.customerName}\n" +
+                                "📞 Phone: ${row.customerMobile}\n" +
+                                "📍 Address: ${row.deliveryAddress}\n" +
+                                "🍲 Bartan: ${row.handiCount} Handi, ${row.spoonsCount} Spoons, ${row.boxesCount} Boxes\n\n" +
+                                "Kripya bartan collect karke kitchen jama karein."
+                            val intent = Intent(Intent.ACTION_VIEW).apply {
+                                data = Uri.parse("https://api.whatsapp.com/send?phone=+91${chosenBoy.mobile}&text=${Uri.encode(msg)}")
+                            }
+                            try {
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                    putExtra(Intent.EXTRA_TEXT, msg)
+                                    type = "text/plain"
+                                }
+                                context.startActivity(Intent.createChooser(sendIntent, "Send Task to Delivery Boy"))
+                            }
+                        }
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Confirm Re-assign", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", fontSize = 12.sp)
+            }
+        }
+    )
+}
+
+// -------------------------------------------------------------
+// MANAGE UTENSILS INVENTORY DIALOG
+// -------------------------------------------------------------
+@Composable
+private fun KitchenManageUtensilsInventoryDialog(
+    utensils: List<KitchenUtensilEntity>,
+    allRows: List<ContainerCashSummaryRow>,
+    onDismiss: () -> Unit,
+    onUpdateUtensil: (KitchenUtensilEntity) -> Unit
+) {
+    val pendingRows = allRows.filter { it.hasContainer && !it.isContainerCollected }
+    val handisOutside = pendingRows.sumOf { it.handiCount }
+    val spoonsOutside = pendingRows.sumOf { it.spoonsCount }
+    val boxesOutside = pendingRows.sumOf { it.boxesCount }
+
+    // Provide default list if database table is initially empty
+    val displayList = if (utensils.isNotEmpty()) {
+        utensils
+    } else {
+        listOf(
+            KitchenUtensilEntity(id = "utensil_handi", name = "Biryani Handi", icon = "🍲", totalStock = 50, unit = "Pcs"),
+            KitchenUtensilEntity(id = "utensil_spoon", name = "Bada Chammach (Serving Spoons)", icon = "🥄", totalStock = 80, unit = "Pcs"),
+            KitchenUtensilEntity(id = "utensil_box", name = "Kachumber / Raita Box", icon = "🥗", totalStock = 40, unit = "Pcs")
+        )
+    }
+
+    var editableList by remember(displayList) { mutableStateOf(displayList) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    color = SaffronPrimary.copy(alpha = 0.12f),
+                    shape = CircleShape,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text("🍲", fontSize = 16.sp)
+                    }
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text("Kitchen Bartan Inventory", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("Master Stock Management", fontSize = 10.5.sp, color = Color.Gray)
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    "Kitchen ke kul bartan stock ko set karein. Bahar gaye hue bartan automatic subtract honge.",
+                    fontSize = 11.sp,
+                    color = Color(0xFF475569)
+                )
+
+                editableList.forEachIndexed { index, item ->
+                    val outsideCount = when {
+                        item.name.contains("Handi", true) -> handisOutside
+                        item.name.contains("Chammach", true) || item.name.contains("Spoon", true) -> spoonsOutside
+                        else -> boxesOutside
+                    }
+                    val currentAvailable = (item.totalStock - outsideCount).coerceAtLeast(0)
+
+                    Surface(
+                        color = Color(0xFFF8FAFC),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("${item.icon} ${item.name}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF0F172A))
+                                Text("Kitchen: $currentAvailable", fontWeight = FontWeight.Bold, fontSize = 10.5.sp, color = VegGreen)
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Bahar: $outsideCount ${item.unit}", fontSize = 10.5.sp, color = Color(0xFFDC2626))
+
+                                // Increment / Decrement stock controls
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    IconButton(
+                                        onClick = {
+                                            if (item.totalStock > 0) {
+                                                val updated = item.copy(totalStock = item.totalStock - 5)
+                                                editableList = editableList.toMutableList().also { it[index] = updated }
+                                                onUpdateUtensil(updated)
+                                            }
+                                        },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Surface(
+                                            color = Color(0xFFE2E8F0),
+                                            shape = CircleShape,
+                                            modifier = Modifier.size(22.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Text("-5", fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+
+                                    Text(
+                                        "${item.totalStock} ${item.unit}",
+                                        fontWeight = FontWeight.Black,
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF0F172A),
+                                        modifier = Modifier.padding(horizontal = 6.dp)
+                                    )
+
+                                    IconButton(
+                                        onClick = {
+                                            val updated = item.copy(totalStock = item.totalStock + 5)
+                                            editableList = editableList.toMutableList().also { it[index] = updated }
+                                            onUpdateUtensil(updated)
+                                        },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Surface(
+                                            color = SaffronPrimary.copy(alpha = 0.15f),
+                                            shape = CircleShape,
+                                            modifier = Modifier.size(22.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Text("+5", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = SaffronPrimary)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Text("Done", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+        }
+    )
+}

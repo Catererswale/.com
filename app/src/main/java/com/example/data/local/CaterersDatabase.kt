@@ -9,6 +9,7 @@ import com.example.data.models.CartItemEntity
 import com.example.data.models.CatererEntity
 import com.example.data.models.DeliveryBoyEntity
 import com.example.data.models.FavoriteKitchenEntity
+import com.example.data.models.KitchenUtensilEntity
 import com.example.data.models.MenuItemEntity
 import com.example.data.models.NotificationEntity
 import com.example.data.models.OrderEntity
@@ -24,9 +25,10 @@ import com.example.data.models.PartnerReviewEntity
         BartanRecordEntity::class,
         NotificationEntity::class,
         PartnerReviewEntity::class,
-        FavoriteKitchenEntity::class
+        FavoriteKitchenEntity::class,
+        KitchenUtensilEntity::class
     ],
-    version = 11,
+    version = 15,
     exportSchema = false
 )
 abstract class CaterersDatabase : RoomDatabase() {

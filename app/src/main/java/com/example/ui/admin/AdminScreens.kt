@@ -4981,6 +4981,22 @@ fun AdminDeliveryPartnerCard(
                     Icon(Icons.Default.Phone, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(11.dp))
                     Spacer(modifier = Modifier.width(2.dp))
                     Text(partner.mobile, fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF0F172A))
+                    if (partner.isMobileVerified) {
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Surface(
+                            shape = RoundedCornerShape(3.dp),
+                            color = Color(0xFFDCFCE7)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = VegGreen, modifier = Modifier.size(9.dp))
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text("OTP Verified", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = VegGreen)
+                            }
+                        }
+                    }
                 }
 
                 Text("•", fontSize = 10.sp, color = Color.LightGray)

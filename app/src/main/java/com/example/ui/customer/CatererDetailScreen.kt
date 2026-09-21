@@ -65,12 +65,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextDecoration
 import com.example.ui.theme.VegGreen
+import com.example.ui.theme.NonVegRed
+import com.example.ui.common.VegNonVegBadge
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.models.CatererEntity
 import com.example.data.models.FoodType
+import com.example.data.models.Language
+import com.example.util.LocalizationManager
 import com.example.data.models.KycStatus
 import com.example.data.models.MenuItemEntity
 import com.example.data.models.UnitType
@@ -87,6 +91,14 @@ import com.example.ui.common.UnitQuantityPicker
 import com.example.ui.common.VegNonVegBadge
 import com.example.ui.theme.AmberSecondary
 import com.example.ui.theme.SaffronPrimary
+import com.example.ui.theme.AwadhiDeepBurgundy
+import com.example.ui.theme.AwadhiCrimsonRed
+import com.example.ui.theme.AwadhiZafraniSaffron
+import com.example.ui.theme.AwadhiDesiGheeGold
+import com.example.ui.theme.AwadhiGheeShine
+import com.example.ui.theme.AwadhiWarmCream
+import com.example.ui.theme.AwadhiHandiCharcoal
+import com.example.ui.theme.AwadhiCardBorder
 
 @Composable
 fun CatererDetailScreen(
@@ -128,6 +140,7 @@ fun CatererDetailScreen(
     val menuItems by viewModel.menuItemsList.collectAsState()
     val cartItems by viewModel.cartItemsList.collectAsState()
     val favoriteKitchenIds by viewModel.favoriteKitchenIds.collectAsState()
+    val currentLanguage by viewModel.currentLanguage.collectAsState()
     val isFavorite = favoriteKitchenIds.contains(caterer.id)
 
     val dbMenu = menuItems.filter { it.catererId == caterer.id }
@@ -209,6 +222,25 @@ fun CatererDetailScreen(
     var eventGuestCount by remember { mutableStateOf(20) }
     var isGuestCalculatorActive by remember { mutableStateOf(false) }
 
+    // Customer Dietary Preference Filter: ALL, VEG, NON_VEG
+    val globalDietFilter by viewModel.customerDietFilter.collectAsState()
+    var selectedDietFilter by remember(globalDietFilter) { mutableStateOf(globalDietFilter) }
+
+    val totalCount = catererMenu.size
+    val vegCount = catererMenu.count { it.foodType == FoodType.VEG }
+    val nonVegCount = catererMenu.count { it.foodType == FoodType.NON_VEG }
+    val isPureVegCaterer = caterer.dietaryType.equals("PURE_VEG", ignoreCase = true) || (nonVegCount == 0 && vegCount > 0)
+    val isPureNonVegCaterer = caterer.dietaryType.equals("NON_VEG", ignoreCase = true) || (vegCount == 0 && nonVegCount > 0)
+
+    // Automatically safeguard dietary filter: If pure veg kitchen, never filter by non-veg
+    LaunchedEffect(isPureVegCaterer, isPureNonVegCaterer) {
+        if (isPureVegCaterer && selectedDietFilter == "NON_VEG") {
+            selectedDietFilter = "ALL"
+        } else if (isPureNonVegCaterer && selectedDietFilter == "VEG") {
+            selectedDietFilter = "ALL"
+        }
+    }
+
     // Kitchen specific food serving ratios (1 Kg me kitne log khaenge)
     val liveKitchenSettings by viewModel.kitchenSettings.collectAsState()
     val bPerKg = if (caterer.id == "caterer_1") liveKitchenSettings.biryaniPersonsPerKg else if (caterer.biryaniPersonsPerKg > 0) caterer.biryaniPersonsPerKg else 6.67
@@ -216,8 +248,17 @@ fun CatererDetailScreen(
     val gPerKg = if (caterer.id == "caterer_1") liveKitchenSettings.gravyPersonsPerKg else if (caterer.gravyPersonsPerKg > 0) caterer.gravyPersonsPerKg else 8.33
     val rPerUnit = if (caterer.id == "caterer_1") liveKitchenSettings.rotiPersonsPerUnit else if (caterer.rotiPersonsPerUnit > 0) caterer.rotiPersonsPerUnit else 0.5
 
-    val filteredItems = if (selectedCategory == "All") catererMenu
-    else catererMenu.filter { it.category == selectedCategory }
+    val filteredItems = remember(catererMenu, selectedCategory, selectedDietFilter) {
+        catererMenu.filter { item ->
+            val matchCat = if (selectedCategory == "All") true else item.category.equals(selectedCategory, ignoreCase = true)
+            val matchDiet = when (selectedDietFilter) {
+                "VEG" -> item.foodType == FoodType.VEG
+                "NON_VEG" -> item.foodType == FoodType.NON_VEG
+                else -> true
+            }
+            matchCat && matchDiet
+        }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
@@ -428,12 +469,86 @@ fun CatererDetailScreen(
                                         fontWeight = FontWeight.Bold,
                                         color = Color(0xFF212121)
                                     )
-                                    Text(
-                                        text = caterer.kitchenName,
-                                        fontSize = 12.sp,
-                                        color = SaffronPrimary,
-                                        fontWeight = FontWeight.Medium
-                                    )
+                                    if (caterer.kitchenName.isNotBlank() && caterer.kitchenName != caterer.name) {
+                                        Text(
+                                            text = "👨‍🍳 ${caterer.kitchenName}",
+                                            fontSize = 13.sp,
+                                            color = SaffronPrimary,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+
+                                    // Dietary Badge (Pure Veg / Non Veg / Both)
+                                    when {
+                                        isPureVegCaterer -> {
+                                            Surface(
+                                                color = Color(0xFFDCFCE7),
+                                                shape = RoundedCornerShape(6.dp),
+                                                border = BorderStroke(1.dp, Color(0xFF86EFAC)),
+                                                modifier = Modifier.padding(top = 4.dp)
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    VegNonVegBadge(foodType = FoodType.VEG, modifier = Modifier.size(10.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(
+                                                        text = if (currentLanguage == Language.HINDI) "100% शुद्ध शाकाहारी 🌿" else "100% PURE VEG 🌿",
+                                                        fontSize = 10.5.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = VegGreen
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        isPureNonVegCaterer -> {
+                                            Surface(
+                                                color = Color(0xFFFFE4E6),
+                                                shape = RoundedCornerShape(6.dp),
+                                                border = BorderStroke(1.dp, Color(0xFFFDA4AF)),
+                                                modifier = Modifier.padding(top = 4.dp)
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    VegNonVegBadge(foodType = FoodType.NON_VEG, modifier = Modifier.size(10.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(
+                                                        text = if (currentLanguage == Language.HINDI) "मांसाहारी स्पेशलिस्ट 🍗" else "NON-VEG SPECIALIST 🍗",
+                                                        fontSize = 10.5.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = NonVegRed
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        else -> {
+                                            Surface(
+                                                color = Color(0xFFF1F5F9),
+                                                shape = RoundedCornerShape(6.dp),
+                                                border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
+                                                modifier = Modifier.padding(top = 4.dp)
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    VegNonVegBadge(foodType = FoodType.VEG, modifier = Modifier.size(9.dp))
+                                                    Spacer(modifier = Modifier.width(3.dp))
+                                                    VegNonVegBadge(foodType = FoodType.NON_VEG, modifier = Modifier.size(9.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(
+                                                        text = if (currentLanguage == Language.HINDI) "शाकाहारी और मांसाहारी 🟢🔴" else "VEG & NON-VEG 🟢🔴",
+                                                        fontSize = 10.sp,
+                                                        fontWeight = FontWeight.Medium,
+                                                        color = Color(0xFF475569)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -467,14 +582,14 @@ fun CatererDetailScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            FssaiBadge(licenseNo = caterer.fssaiLicense)
+                            FssaiBadge(licenseNo = caterer.fssaiLicense, language = currentLanguage)
                             Surface(
                                 color = Color(0xFFFEF3C7),
                                 shape = RoundedCornerShape(6.dp),
                                 modifier = Modifier.clickable { onOpenReviews(caterer.id) }
                             ) {
                                 Text(
-                                    text = "★ Read ${caterer.reviewCount}+ Reviews ›",
+                                    text = LocalizationManager.getReviewsButtonText(caterer.reviewCount, currentLanguage),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF92400E),
@@ -489,7 +604,7 @@ fun CatererDetailScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text("📍 ${caterer.address}", fontSize = 12.sp, color = Color.Gray)
-                            Text("⏱️ ${caterer.deliveryTimeMinutes} mins", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("⏱️ ${LocalizationManager.getDeliveryTime(caterer.deliveryTimeMinutes, currentLanguage)}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -535,13 +650,13 @@ fun CatererDetailScreen(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column {
                                     Text(
-                                        text = "⚡ Event Food Calculator (10 - 200 Guests)",
+                                        text = LocalizationManager.getCalculatorTitle(currentLanguage),
                                         fontSize = 13.5.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = if (isGuestCalculatorActive) Color(0xFF9A3412) else Color(0xFF1E293B)
                                     )
                                     Text(
-                                        text = "Birthday/Functions ke liye auto-suggest quantity",
+                                        text = LocalizationManager.getCalculatorSubtitle(currentLanguage),
                                         fontSize = 11.sp,
                                         color = Color.Gray
                                     )
@@ -559,7 +674,7 @@ fun CatererDetailScreen(
                                 modifier = Modifier.testTag("toggle_guest_calc")
                             ) {
                                 Text(
-                                    text = if (isGuestCalculatorActive) "Active ✓" else "Calculate",
+                                    text = LocalizationManager.getCalculateBtnText(isGuestCalculatorActive, currentLanguage),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -575,7 +690,7 @@ fun CatererDetailScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Select Guests (मेहमान संख्या):",
+                                    text = LocalizationManager.getGuestsLabel(currentLanguage),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = Color(0xFF431407)
@@ -585,7 +700,7 @@ fun CatererDetailScreen(
                                     shape = RoundedCornerShape(8.dp)
                                 ) {
                                     Text(
-                                        text = "👥 $eventGuestCount Guests",
+                                        text = if (currentLanguage == Language.HINDI) "👥 $eventGuestCount मेहमान" else "👥 $eventGuestCount Guests",
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = Color.White,
@@ -712,6 +827,194 @@ fun CatererDetailScreen(
                 }
             }
 
+            // Dietary Trust & Filter Bar (Pure Veg vs Non-Veg Specialist vs Mixed)
+            item {
+                if (isPureVegCaterer) {
+                    // 🌿 100% Pure Vegetarian Kitchen Trust Guarantee Card (NO NON-VEG OPTION)
+                    Surface(
+                        color = Color(0xFFF0FDF4),
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.2.dp, Color(0xFF86EFAC)),
+                        shadowElevation = 1.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                            .testTag("pure_veg_guarantee_card")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFDCFCE7)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                VegNonVegBadge(foodType = FoodType.VEG, modifier = Modifier.size(18.dp))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = if (currentLanguage == Language.HINDI) "100% शुद्ध शाकाहारी रसोई" else "100% Pure Vegetarian Kitchen",
+                                        fontSize = 13.5.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color(0xFF14532D)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("🌿", fontSize = 13.sp)
+                                }
+                                Text(
+                                    text = if (currentLanguage == Language.HINDI)
+                                        "शुद्ध शाकाहारी • सभी $vegCount व्यंजन बिना मांसाहार या अंडे के शुद्ध शाकाहारी सामग्री से तैयार।"
+                                    else
+                                        "Shuddh Shakahari • All $vegCount dishes prepared with pure veg ingredients. No non-veg or eggs served.",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF166534),
+                                    lineHeight = 15.sp
+                                )
+                            }
+                        }
+                    }
+                } else if (isPureNonVegCaterer) {
+                    // 🍗 Non-Veg Specialist Kitchen Card (NO VEG OPTION)
+                    Surface(
+                        color = Color(0xFFFFF1F2),
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.2.dp, Color(0xFFFDA4AF)),
+                        shadowElevation = 1.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                            .testTag("non_veg_guarantee_card")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFFFE4E6)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                VegNonVegBadge(foodType = FoodType.NON_VEG, modifier = Modifier.size(18.dp))
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (currentLanguage == Language.HINDI) "मांसाहारी स्पेशलिस्ट रसोई 🍗" else "Non-Veg Specialist Kitchen 🍗",
+                                    fontSize = 13.5.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color(0xFF881337)
+                                )
+                                Text(
+                                    text = if (currentLanguage == Language.HINDI)
+                                        "असली मुग़लई और अवधी नवाबी व्यंजन। $nonVegCount लज़ीज़ व्यंजन उपलब्ध।"
+                                    else
+                                        "Authentic Mughlai & Awadhi non-veg royal recipes. $nonVegCount dishes available.",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF9F1239),
+                                    lineHeight = 15.sp
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    // Mixed Kitchen (Veg & Non-Veg): Customer can filter between All, Pure Veg, and Non-Veg
+                    Surface(
+                        color = Color.White,
+                        shape = RoundedCornerShape(14.dp),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        shadowElevation = 1.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = LocalizationManager.getDietaryFilterTitle(currentLanguage),
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF475569),
+                                    modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+                                )
+                                if (selectedDietFilter != "ALL") {
+                                    Text(
+                                        text = LocalizationManager.getResetText(currentLanguage),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = SaffronPrimary,
+                                        modifier = Modifier
+                                            .clickable {
+                                                selectedDietFilter = "ALL"
+                                                viewModel.setCustomerDietFilter("ALL")
+                                            }
+                                            .padding(end = 4.dp, bottom = 4.dp)
+                                    )
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // All Filter
+                                DietPillFilter(
+                                    label = LocalizationManager.getAllDishesFilter(currentLanguage),
+                                    count = totalCount,
+                                    isSelected = selectedDietFilter == "ALL",
+                                    badge = null,
+                                    activeColor = SaffronPrimary,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
+                                        selectedDietFilter = "ALL"
+                                        viewModel.setCustomerDietFilter("ALL")
+                                    }
+                                )
+
+                                // Pure Veg Filter
+                                DietPillFilter(
+                                    label = LocalizationManager.getPureVegFilter(currentLanguage),
+                                    count = vegCount,
+                                    isSelected = selectedDietFilter == "VEG",
+                                    badge = { VegNonVegBadge(foodType = FoodType.VEG) },
+                                    activeColor = VegGreen,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
+                                        selectedDietFilter = "VEG"
+                                        viewModel.setCustomerDietFilter("VEG")
+                                    }
+                                )
+
+                                // Non-Veg Filter
+                                DietPillFilter(
+                                    label = LocalizationManager.getNonVegFilter(currentLanguage),
+                                    count = nonVegCount,
+                                    isSelected = selectedDietFilter == "NON_VEG",
+                                    badge = { VegNonVegBadge(foodType = FoodType.NON_VEG) },
+                                    activeColor = NonVegRed,
+                                    modifier = Modifier.weight(1f),
+                                    onClick = {
+                                        selectedDietFilter = "NON_VEG"
+                                        viewModel.setCustomerDietFilter("NON_VEG")
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Category Filter Bar
             item {
                 LazyRow(
@@ -722,10 +1025,65 @@ fun CatererDetailScreen(
                         FilterChip(
                             selected = cat == selectedCategory,
                             onClick = { selectedCategory = cat },
-                            label = { Text(cat, fontSize = 12.sp) },
+                            label = { Text(LocalizationManager.getCategoryLabel(cat, currentLanguage), fontSize = 12.sp) },
                             shape = RoundedCornerShape(16.dp),
                             modifier = Modifier.testTag("detail_category_$cat")
                         )
+                    }
+                }
+            }
+
+            // Empty state if no items match current combination of category + diet
+            if (filteredItems.isEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Fastfood,
+                                contentDescription = null,
+                                tint = Color(0xFF94A3B8),
+                                modifier = Modifier.size(46.dp)
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "No Dishes Match Filter",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1E293B)
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "No ${if (selectedDietFilter == "VEG") "Pure Veg 🟢" else if (selectedDietFilter == "NON_VEG") "Non-Veg 🔴" else ""} dishes found in '$selectedCategory'.",
+                                fontSize = 13.sp,
+                                color = Color(0xFF64748B),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Button(
+                                onClick = {
+                                    selectedCategory = "All"
+                                    selectedDietFilter = "ALL"
+                                    viewModel.setCustomerDietFilter("ALL")
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("Show All Menu Items (सभी देखें)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
             }
@@ -739,6 +1097,7 @@ fun CatererDetailScreen(
                     sweetPersonsPerKg = sPerKg,
                     gravyPersonsPerKg = gPerKg,
                     rotiPersonsPerUnit = rPerUnit,
+                    language = currentLanguage,
                     onAddToCart = { qty ->
                         viewModel.addToCart(item, qty)
                     }
@@ -764,12 +1123,12 @@ fun CatererDetailScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
-                        Text("${cartItems.size} ITEMS IN CART", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AmberSecondary)
+                        Text(LocalizationManager.getItemsInCartText(cartItems.size, currentLanguage).uppercase(), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AmberSecondary)
                         Text("₹${cartItems.sumOf { it.totalPrice }.toInt()} Total", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     }
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("View Cart", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text(LocalizationManager.getViewCartText(currentLanguage), fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.width(6.dp))
                         Icon(Icons.Default.ShoppingBag, contentDescription = null, modifier = Modifier.size(18.dp))
                     }
@@ -787,6 +1146,7 @@ fun ProductMenuItemCard(
     sweetPersonsPerKg: Double = 12.5,
     gravyPersonsPerKg: Double = 8.33,
     rotiPersonsPerUnit: Double = 0.5,
+    language: Language = Language.ENGLISH,
     onAddToCart: (Double) -> Unit
 ) {
     var quantity by remember { mutableDoubleStateOf(item.minQuantity) }
@@ -838,21 +1198,26 @@ fun ProductMenuItemCard(
         }
     }
 
-    val unitLabel = when (item.unitType) {
-        UnitType.KG -> "/ Kg"
-        UnitType.DOZEN -> "/ Dozen"
-        UnitType.LITRE -> "/ Litre"
-        UnitType.PORTION -> "/ Portion"
+    val unitLabel = LocalizationManager.getUnitLabel(item.unitType, language)
+
+    val rawTag = when {
+        item.name.contains("Biryani", ignoreCase = true) || item.name.contains("Rice", ignoreCase = true) -> "🔥 Dum Pukht Handi"
+        item.name.contains("Korma", ignoreCase = true) || item.name.contains("Curry", ignoreCase = true) || item.name.contains("Gravy", ignoreCase = true) || item.name.contains("Nihari", ignoreCase = true) -> "🥘 Zafrani Mughlai Gravy"
+        item.name.contains("Sweet", ignoreCase = true) || item.name.contains("Halwa", ignoreCase = true) || item.name.contains("Kheer", ignoreCase = true) || item.name.contains("Phirni", ignoreCase = true) -> "🍨 Desi Ghee Shahi Sweet"
+        item.name.contains("Roti", ignoreCase = true) || item.name.contains("Naan", ignoreCase = true) || item.name.contains("Kulcha", ignoreCase = true) -> "🫓 Clay Tandoor Fresh"
+        else -> null
     }
+    val appetizingTag = LocalizationManager.getAppetizingTag(rawTag, language)
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp)
             .testTag("product_item_${item.id}"),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        border = BorderStroke(1.dp, AwadhiCardBorder)
     ) {
         Row(
             modifier = Modifier.padding(14.dp),
@@ -861,9 +1226,10 @@ fun ProductMenuItemCard(
             // Food Image / Icon
             Box(
                 modifier = Modifier
-                    .size(80.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFFFFF3E0)),
+                    .size(82.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFFFEF3C7))
+                    .border(1.dp, AwadhiDesiGheeGold.copy(alpha = 0.4f), RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 if (item.imageUrl.isNotBlank()) {
@@ -877,7 +1243,7 @@ fun ProductMenuItemCard(
                     Icon(
                         imageVector = Icons.Default.Fastfood,
                         contentDescription = null,
-                        tint = SaffronPrimary,
+                        tint = AwadhiCrimsonRed,
                         modifier = Modifier.size(36.dp)
                     )
                 }
@@ -886,22 +1252,38 @@ fun ProductMenuItemCard(
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
+                if (appetizingTag != null) {
+                    Surface(
+                        color = Color(0xFFFEF3C7),
+                        shape = RoundedCornerShape(4.dp),
+                        modifier = Modifier.padding(bottom = 3.dp)
+                    ) {
+                        Text(
+                            text = appetizingTag,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = AwadhiDeepBurgundy,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                        )
+                    }
+                }
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     VegNonVegBadge(foodType = item.foodType)
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = item.name,
+                        text = LocalizationManager.getDishName(item.name, language),
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF212121)
+                        color = AwadhiHandiCharcoal
                     )
                 }
 
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = item.description,
+                    text = LocalizationManager.getDishDescription(item.name, item.description, language),
                     fontSize = 11.sp,
-                    color = Color.Gray,
+                    color = Color(0xFF78716C),
                     maxLines = 2,
                     lineHeight = 15.sp
                 )
@@ -934,7 +1316,7 @@ fun ProductMenuItemCard(
                         text = "₹${effectivePrice.toInt()} ",
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
-                        color = SaffronPrimary
+                        color = AwadhiCrimsonRed
                     )
                     if (hasDiscount) {
                         Text(
@@ -984,13 +1366,69 @@ fun ProductMenuItemCard(
 
                     Button(
                         onClick = { onAddToCart(quantity) },
-                        colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                        colors = ButtonDefaults.buttonColors(containerColor = AwadhiCrimsonRed),
                         shape = RoundedCornerShape(8.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
                         modifier = Modifier.testTag("add_to_cart_${item.id}")
                     ) {
-                        Text("Add to Cart", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(LocalizationManager.getAddToCartText(language), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DietPillFilter(
+    label: String,
+    count: Int,
+    isSelected: Boolean,
+    badge: (@Composable () -> Unit)?,
+    activeColor: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(10.dp),
+        color = if (isSelected) activeColor.copy(alpha = 0.12f) else Color(0xFFF8FAFC),
+        border = BorderStroke(
+            width = if (isSelected) 1.5.dp else 1.dp,
+            color = if (isSelected) activeColor else Color(0xFFE2E8F0)
+        ),
+        modifier = modifier.height(38.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 6.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (badge != null) {
+                badge()
+                Spacer(modifier = Modifier.width(5.dp))
+            }
+            Text(
+                text = label,
+                fontSize = 11.5.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                color = if (isSelected) activeColor else Color(0xFF334155)
+            )
+            Spacer(modifier = Modifier.width(5.dp))
+            Surface(
+                shape = CircleShape,
+                color = if (isSelected) activeColor else Color(0xFFCBD5E1),
+                modifier = Modifier.size(17.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = count.toString(),
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
                 }
             }
         }

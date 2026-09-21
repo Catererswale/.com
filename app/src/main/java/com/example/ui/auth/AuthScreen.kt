@@ -17,34 +17,43 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeliveryDining
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Kitchen
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RestaurantMenu
 import androidx.compose.material.icons.filled.SafetyCheck
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
@@ -55,6 +64,7 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -100,10 +110,21 @@ fun AuthScreen(
     var fssaiOrLicense by remember { mutableStateOf("") }
     var adminPin by remember { mutableStateOf("") }
 
-    // OTP simulation
+    // Mobile OTP login state
+    var loginMethod by remember { mutableStateOf("OTP") } // "OTP" or "PASSWORD"
+    var otpMobileNumber by remember { mutableStateOf("9876543210") }
+    var customerOtpName by remember { mutableStateOf("Rohan Verma") }
     var isOtpSent by remember { mutableStateOf(false) }
     var otpInput by remember { mutableStateOf("") }
-    var generatedOtp by remember { mutableStateOf("1234") }
+    var generatedOtp by remember { mutableStateOf("7291") }
+    var resendCountdown by remember { mutableStateOf(0) }
+
+    LaunchedEffect(resendCountdown) {
+        if (resendCountdown > 0) {
+            kotlinx.coroutines.delay(1000)
+            resendCountdown -= 1
+        }
+    }
 
     Surface(
         modifier = modifier.fillMaxSize(),
@@ -295,101 +316,373 @@ fun AuthScreen(
                         Spacer(modifier = Modifier.height(14.dp))
 
                         if (!isSignUpMode) {
-                            // --- LOGIN FORM ---
-                            OutlinedTextField(
-                                value = mobileOrEmail,
-                                onValueChange = { mobileOrEmail = it },
-                                label = { Text("Mobile Number or Email / मोबाइल या ईमेल") },
-                                leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = SaffronPrimary) },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                                modifier = Modifier.fillMaxWidth().testTag("login_input_phone"),
-                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SaffronPrimary)
-                            )
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            OutlinedTextField(
-                                value = password,
-                                onValueChange = { password = it },
-                                label = { Text("Password / पासवर्ड") },
-                                leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = SaffronPrimary) },
-                                trailingIcon = {
-                                    IconButton(onClick = { showPassword = !showPassword }) {
+                            // --- SUB-TOGGLE: MOBILE OTP vs PASSWORD ---
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFFF1F5F9))
+                                    .padding(2.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (loginMethod == "OTP") Color.White else Color.Transparent)
+                                        .clickable { loginMethod = "OTP" }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
-                                            imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                            contentDescription = "Toggle password"
+                                            Icons.Default.Sms,
+                                            contentDescription = null,
+                                            tint = if (loginMethod == "OTP") SaffronPrimary else Color(0xFF64748B),
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            "📲 Mobile OTP (ओटीपी)",
+                                            fontSize = 12.sp,
+                                            fontWeight = if (loginMethod == "OTP") FontWeight.Bold else FontWeight.Medium,
+                                            color = if (loginMethod == "OTP") SaffronPrimary else Color(0xFF64748B)
                                         )
                                     }
-                                },
-                                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth().testTag("login_input_password"),
-                                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SaffronPrimary)
-                            )
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // OTP Simulation Button
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                TextButton(onClick = {
-                                    if (mobileOrEmail.isBlank()) {
-                                        Toast.makeText(context, "Please enter mobile number first", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        isOtpSent = true
-                                        otpInput = "1234"
-                                        Toast.makeText(context, "🔑 OTP sent to $mobileOrEmail! Auto-filled: 1234", Toast.LENGTH_LONG).show()
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (loginMethod == "PASSWORD") Color.White else Color.Transparent)
+                                        .clickable { loginMethod = "PASSWORD" }
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Default.Lock,
+                                            contentDescription = null,
+                                            tint = if (loginMethod == "PASSWORD") SaffronPrimary else Color(0xFF64748B),
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            "🔑 Password (पासवर्ड)",
+                                            fontSize = 12.sp,
+                                            fontWeight = if (loginMethod == "PASSWORD") FontWeight.Bold else FontWeight.Medium,
+                                            color = if (loginMethod == "PASSWORD") SaffronPrimary else Color(0xFF64748B)
+                                        )
                                     }
-                                }) {
-                                    Text("Login via OTP (ओटीपी द्वारा लॉगिन)", color = Color(0xFF0288D1), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
 
-                            if (isOtpSent) {
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            if (loginMethod == "OTP") {
+                                // ===== MOBILE OTP LOGIN FLOW =====
+                                if (!isOtpSent) {
+                                    // STEP 1: Enter mobile number and request OTP
+                                    Text(
+                                        "Enter your registered mobile number for instant SMS login:",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF475569)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    OutlinedTextField(
+                                        value = otpMobileNumber,
+                                        onValueChange = { input ->
+                                            val digitsOnly = input.filter { it.isDigit() }
+                                            if (digitsOnly.length <= 10) {
+                                                otpMobileNumber = digitsOnly
+                                            }
+                                        },
+                                        label = { Text("Mobile Number (10 डिजिट मोबाइल)") },
+                                        leadingIcon = {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.padding(start = 8.dp, end = 4.dp)
+                                            ) {
+                                                Text("🇮🇳 +91", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1E293B))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Box(modifier = Modifier.width(1.dp).height(20.dp).background(Color(0xFFCBD5E1)))
+                                            }
+                                        },
+                                        singleLine = true,
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                        modifier = Modifier.fillMaxWidth().testTag("otp_mobile_input"),
+                                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SaffronPrimary)
+                                    )
+
+                                    Spacer(modifier = Modifier.height(14.dp))
+
+                                    Button(
+                                        onClick = {
+                                            if (otpMobileNumber.length < 10) {
+                                                Toast.makeText(context, "Kripya 10-digit mobile number enter karein", Toast.LENGTH_SHORT).show()
+                                                return@Button
+                                            }
+                                            val newCode = (1000..9999).random().toString()
+                                            generatedOtp = newCode
+                                            otpInput = ""
+                                            isOtpSent = true
+                                            resendCountdown = 30
+                                            Toast.makeText(context, "📲 OTP sent to +91 $otpMobileNumber! Code: $newCode", Toast.LENGTH_LONG).show()
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                                        shape = RoundedCornerShape(10.dp),
+                                        modifier = Modifier.fillMaxWidth().height(48.dp).testTag("send_otp_button")
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("SEND OTP VIA SMS (ओटीपी भेजें)", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    }
+                                } else {
+                                    // STEP 2: Verify OTP
+                                    Surface(
+                                        color = Color(0xFFF0FDF4),
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = BorderStroke(1.dp, Color(0xFFBBF7D0)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF16A34A), modifier = Modifier.size(20.dp))
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Column {
+                                                    Text("OTP sent via SMS", fontSize = 11.sp, color = Color(0xFF15803D), fontWeight = FontWeight.Bold)
+                                                    Text("+91 $otpMobileNumber", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFF166534))
+                                                }
+                                            }
+                                            TextButton(
+                                                onClick = {
+                                                    isOtpSent = false
+                                                    otpInput = ""
+                                                }
+                                            ) {
+                                                Icon(Icons.Default.Edit, contentDescription = null, tint = SaffronPrimary, modifier = Modifier.size(14.dp))
+                                                Spacer(modifier = Modifier.width(2.dp))
+                                                Text("Change", fontSize = 11.sp, color = SaffronPrimary, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    // Auto-Fill Demo Chip
+                                    Surface(
+                                        color = Color(0xFFFFFBEB),
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.Sms, contentDescription = null, tint = Color(0xFFB45309), modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    "SMS OTP: [ $generatedOtp ]",
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = Color(0xFF92400E)
+                                                )
+                                            }
+                                            Surface(
+                                                color = SaffronPrimary,
+                                                shape = RoundedCornerShape(6.dp),
+                                                modifier = Modifier.clickable {
+                                                    otpInput = generatedOtp
+                                                    Toast.makeText(context, "OTP Auto-Filled: $generatedOtp", Toast.LENGTH_SHORT).show()
+                                                }
+                                            ) {
+                                                Text(
+                                                    "Auto-Fill ⚡",
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color.White,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    OutlinedTextField(
+                                        value = otpInput,
+                                        onValueChange = { input ->
+                                            val digitsOnly = input.filter { it.isDigit() }
+                                            if (digitsOnly.length <= 4) {
+                                                otpInput = digitsOnly
+                                            }
+                                        },
+                                        label = { Text("Enter 4-Digit OTP (ओटीपी दर्ज करें)") },
+                                        leadingIcon = { Icon(Icons.Default.Security, contentDescription = null, tint = SaffronPrimary) },
+                                        singleLine = true,
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                        modifier = Modifier.fillMaxWidth().testTag("otp_digit_input"),
+                                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SaffronPrimary)
+                                    )
+
+                                    if (selectedRole == UserRole.CUSTOMER) {
+                                        Spacer(modifier = Modifier.height(10.dp))
+                                        OutlinedTextField(
+                                            value = customerOtpName,
+                                            onValueChange = { customerOtpName = it },
+                                            label = { Text("Your Name (आपका नाम)") },
+                                            leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = SaffronPrimary) },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth().testTag("otp_customer_name"),
+                                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SaffronPrimary)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    // Resend OTP Row
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (resendCountdown > 0) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.Schedule, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(14.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Resend OTP in 0:${resendCountdown.toString().padStart(2, '0')}", fontSize = 11.sp, color = Color.Gray)
+                                            }
+                                        } else {
+                                            TextButton(
+                                                onClick = {
+                                                    val newCode = (1000..9999).random().toString()
+                                                    generatedOtp = newCode
+                                                    otpInput = ""
+                                                    resendCountdown = 30
+                                                    Toast.makeText(context, "New OTP sent: $newCode", Toast.LENGTH_SHORT).show()
+                                                }
+                                            ) {
+                                                Icon(Icons.Default.Refresh, contentDescription = null, tint = SaffronPrimary, modifier = Modifier.size(14.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Resend OTP SMS (ओटीपी दोबारा भेजें)", fontSize = 11.5.sp, color = SaffronPrimary, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    Button(
+                                        onClick = {
+                                            if (otpInput.isBlank()) {
+                                                Toast.makeText(context, "Kripya 4-digit OTP enter karein", Toast.LENGTH_SHORT).show()
+                                                return@Button
+                                            }
+                                            val isValidOtp = (otpInput.trim() == generatedOtp) ||
+                                                    (otpInput.trim() == "1234") ||
+                                                    (otpInput.trim() == "0000") ||
+                                                    (otpInput.trim() == "7291")
+
+                                            if (!isValidOtp) {
+                                                Toast.makeText(context, "❌ Invalid OTP! Please enter: $generatedOtp", Toast.LENGTH_LONG).show()
+                                                return@Button
+                                            }
+
+                                            val nameToUse = when (selectedRole) {
+                                                UserRole.CUSTOMER -> customerOtpName.ifBlank { "Rohan Verma" }
+                                                UserRole.KITCHEN -> "A1 Huma Caterers"
+                                                UserRole.DELIVERY_BOY -> "Amit Kumar"
+                                                UserRole.SUPER_ADMIN -> "Super Admin"
+                                            }
+
+                                            val profile = UserProfile(
+                                                name = nameToUse,
+                                                mobile = "+91 $otpMobileNumber",
+                                                role = selectedRole,
+                                                businessName = if (selectedRole == UserRole.KITCHEN) "A1 Huma Caterers" else "",
+                                                city = "New Delhi"
+                                            )
+                                            Toast.makeText(context, "✅ Phone Verified Successfully! Welcome $nameToUse", Toast.LENGTH_SHORT).show()
+                                            onLoginSuccess(profile)
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
+                                        shape = RoundedCornerShape(10.dp),
+                                        modifier = Modifier.fillMaxWidth().height(48.dp).testTag("verify_otp_button")
+                                    ) {
+                                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("VERIFY OTP & LOGIN / लॉगिन करें", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    }
+                                }
+                            } else {
+                                // ===== PASSWORD LOGIN FLOW =====
                                 OutlinedTextField(
-                                    value = otpInput,
-                                    onValueChange = { otpInput = it },
-                                    label = { Text("Enter 4-Digit OTP") },
-                                    leadingIcon = { Icon(Icons.Default.Security, contentDescription = null, tint = SaffronPrimary) },
+                                    value = mobileOrEmail,
+                                    onValueChange = { mobileOrEmail = it },
+                                    label = { Text("Mobile Number or Email / मोबाइल या ईमेल") },
+                                    leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = SaffronPrimary) },
                                     singleLine = true,
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                    modifier = Modifier.fillMaxWidth().testTag("login_input_phone"),
                                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SaffronPrimary)
                                 )
-                            }
 
-                            Spacer(modifier = Modifier.height(12.dp))
+                                Spacer(modifier = Modifier.height(12.dp))
 
-                            Button(
-                                onClick = {
-                                    if (mobileOrEmail.isBlank() && !isOtpSent) {
-                                        Toast.makeText(context, "Please enter Mobile Number or Email", Toast.LENGTH_SHORT).show()
-                                        return@Button
-                                    }
-                                    val nameToUse = when (selectedRole) {
-                                        UserRole.CUSTOMER -> "Rohan Verma"
-                                        UserRole.KITCHEN -> "A1 Huma Caterers"
-                                        UserRole.DELIVERY_BOY -> "Amit Kumar"
-                                        UserRole.SUPER_ADMIN -> "Super Admin"
-                                    }
-                                    val profile = UserProfile(
-                                        name = nameToUse,
-                                        mobile = if (mobileOrEmail.isNotBlank()) mobileOrEmail else "+91 98765 43210",
-                                        role = selectedRole,
-                                        businessName = if (selectedRole == UserRole.KITCHEN) "A1 Huma Caterers" else "",
-                                        city = "New Delhi"
-                                    )
-                                    onLoginSuccess(profile)
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.fillMaxWidth().height(48.dp).testTag("auth_submit_login")
-                            ) {
-                                Text("LOGIN TO PORTAL / प्रवेश करें", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                OutlinedTextField(
+                                    value = password,
+                                    onValueChange = { password = it },
+                                    label = { Text("Password / पासवर्ड") },
+                                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = SaffronPrimary) },
+                                    trailingIcon = {
+                                        IconButton(onClick = { showPassword = !showPassword }) {
+                                            Icon(
+                                                imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                                contentDescription = "Toggle password"
+                                            )
+                                        }
+                                    },
+                                    visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth().testTag("login_input_password"),
+                                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = SaffronPrimary)
+                                )
+
+                                Spacer(modifier = Modifier.height(14.dp))
+
+                                Button(
+                                    onClick = {
+                                        if (mobileOrEmail.isBlank()) {
+                                            Toast.makeText(context, "Please enter Mobile Number or Email", Toast.LENGTH_SHORT).show()
+                                            return@Button
+                                        }
+                                        val nameToUse = when (selectedRole) {
+                                            UserRole.CUSTOMER -> "Rohan Verma"
+                                            UserRole.KITCHEN -> "A1 Huma Caterers"
+                                            UserRole.DELIVERY_BOY -> "Amit Kumar"
+                                            UserRole.SUPER_ADMIN -> "Super Admin"
+                                        }
+                                        val profile = UserProfile(
+                                            name = nameToUse,
+                                            mobile = if (mobileOrEmail.isNotBlank()) mobileOrEmail else "+91 98765 43210",
+                                            role = selectedRole,
+                                            businessName = if (selectedRole == UserRole.KITCHEN) "A1 Huma Caterers" else "",
+                                            city = "New Delhi"
+                                        )
+                                        onLoginSuccess(profile)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth().height(48.dp).testTag("auth_submit_login")
+                                ) {
+                                    Text("LOGIN TO PORTAL / प्रवेश करें", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                }
                             }
                         } else {
                             // --- SIGN UP FORM ---

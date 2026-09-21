@@ -1,7 +1,9 @@
 package com.example.ui.customer
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import com.example.ui.theme.VegGreen
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +26,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Help
 import androidx.compose.material.icons.filled.History
@@ -34,8 +37,14 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SoupKitchen
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.SupportAgent
+import androidx.compose.material.icons.filled.VpnKey
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -313,6 +322,14 @@ fun CustomerProfileScreen(
                         ) {
                             Text("Date: ${order.deliveryDate} (${order.deliveryTimeSlot})", fontSize = 11.sp)
                             Text("₹${order.totalAmount.toInt()}", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+
+                        if (order.orderStatus.name != "CANCELLED" && order.deliveryOtp.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            DeliveryOtpSmallColumn(
+                                otp = order.deliveryOtp,
+                                isDelivered = order.orderStatus.name == "DELIVERED"
+                            )
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(
@@ -624,6 +641,124 @@ private fun FaqItem(question: String, answer: String) {
     }
 }
 
+/**
+ * Delivery OTP Small Column / Badge displayed inside Customer Order cards
+ * Matching the Live Tracking OTP verification style requested by customer
+ */
+@Composable
+fun DeliveryOtpSmallColumn(
+    otp: String,
+    isDelivered: Boolean,
+    modifier: Modifier = Modifier
+) {
+    if (otp.isBlank()) return
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+
+    Surface(
+        color = if (isDelivered) Color(0xFFF8FAFC) else Color(0xFF141416),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(
+            1.dp,
+            if (isDelivered) Color(0xFFCBD5E1) else Color(0xFFEA580C).copy(alpha = 0.5f)
+        ),
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable {
+                clipboardManager.setText(AnnotatedString(otp))
+                Toast.makeText(context, "Delivery OTP $otp Copied to Clipboard! 📋", Toast.LENGTH_SHORT).show()
+            }
+            .testTag("delivery_otp_badge_$otp")
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 10.dp, vertical = 7.dp)
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = if (isDelivered) Color(0xFFCBD5E1) else Color(0xFFEA580C),
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            Icons.Default.VpnKey,
+                            contentDescription = "OTP Key",
+                            tint = if (isDelivered) Color(0xFF475569) else Color.White,
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Delivery OTP",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isDelivered) Color(0xFF334155) else Color.White
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            color = if (isDelivered) Color(0xFFDCFCE7) else Color(0xFFEA580C).copy(alpha = 0.25f),
+                            shape = RoundedCornerShape(3.dp)
+                        ) {
+                            Text(
+                                text = if (isDelivered) "VERIFIED ✅" else "COMPULSORY",
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (isDelivered) Color(0xFF15803D) else Color(0xFFFB923C),
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                        }
+                    }
+                    Text(
+                        text = if (isDelivered) "Verified with rider upon delivery" else "Share with driver at drop-off • Tap to copy",
+                        fontSize = 9.5.sp,
+                        color = if (isDelivered) Color(0xFF64748B) else Color(0xFFA1A1AA)
+                    )
+                }
+            }
+
+            // 4 digit blocks in vibrant orange
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                otp.forEach { char ->
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = if (isDelivered) Color(0xFFE2E8F0) else Color(0xFFEA580C),
+                        modifier = Modifier.size(width = 20.dp, height = 24.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = char.toString(),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (isDelivered) Color(0xFF1E293B) else Color.White
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.width(3.dp))
+                Icon(
+                    Icons.Default.ContentCopy,
+                    contentDescription = "Copy OTP",
+                    tint = if (isDelivered) Color(0xFF94A3B8) else Color(0xFFFB923C),
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
+    }
+}
+
 @Composable
 fun CustomerOrdersScreen(
     viewModel: CaterersViewModel,
@@ -634,6 +769,8 @@ fun CustomerOrdersScreen(
 ) {
     val orders by viewModel.ordersList.collectAsState()
     var selectedTab by remember { mutableStateOf(0) } // 0: All, 1: Active, 2: Delivered & Rate
+    var orderForCancellation by remember { mutableStateOf<OrderEntity?>(null) }
+    var orderForReschedule by remember { mutableStateOf<OrderEntity?>(null) }
 
     val activeOrder = orders.firstOrNull { it.orderStatus != com.example.data.models.OrderStatus.DELIVERED && it.orderStatus != com.example.data.models.OrderStatus.CANCELLED }
     val latestDeliveredOrder = orders.firstOrNull { it.orderStatus == com.example.data.models.OrderStatus.DELIVERED }
@@ -774,6 +911,14 @@ fun CustomerOrdersScreen(
                                     Text("🔴 Track Live", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
+
+                            if (activeOrder.deliveryOtp.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                DeliveryOtpSmallColumn(
+                                    otp = activeOrder.deliveryOtp,
+                                    isDelivered = false
+                                )
+                            }
                         }
                     }
                 }
@@ -909,11 +1054,136 @@ fun CustomerOrdersScreen(
                             Text("₹${order.totalAmount.toInt()}", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF1E293B))
                         }
 
+                        // Delivery Verification OTP Small Column (Customer ko OTP dikhane ke liye)
+                        if (order.orderStatus.name != "CANCELLED" && order.deliveryOtp.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            DeliveryOtpSmallColumn(
+                                otp = order.deliveryOtp,
+                                isDelivered = order.orderStatus.name == "DELIVERED"
+                            )
+                        }
+
+                        // Bartan / Containers Flow (Visible to Customer in My Orders)
+                        if (order.isBartanPending || order.bartanDescription.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Surface(
+                                color = if (order.isBartanReturned) Color(0xFFF0FDF4) else Color(0xFFFFFBEB),
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, if (order.isBartanReturned) Color(0xFFBBF7D0) else Color(0xFFFDE68A)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.SoupKitchen,
+                                        contentDescription = null,
+                                        tint = if (order.isBartanReturned) Color(0xFF16A34A) else AmberSecondary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                "🥘 Kitchen Bartan / Containers:",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (order.isBartanReturned) Color(0xFF166534) else Color(0xFF92400E)
+                                            )
+                                            Surface(
+                                                color = if (order.isBartanReturned) Color(0xFFDCFCE7) else Color(0xFFFEF3C7),
+                                                shape = RoundedCornerShape(4.dp)
+                                            ) {
+                                                Text(
+                                                    text = if (order.isBartanReturned) "Returned ✅" else "Issued With Order ⏳",
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (order.isBartanReturned) Color(0xFF166534) else Color(0xFFB45309),
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                )
+                                            }
+                                        }
+                                        Text(
+                                            text = "${order.bartanDescription} • Handed over by delivery partner. Please keep safe for pickup.",
+                                            fontSize = 10.5.sp,
+                                            color = if (order.isBartanReturned) Color(0xFF14532D) else Color(0xFF78350F)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // If order is cancelled, show policy outcome summary
+                        if (order.orderStatus.name == "CANCELLED") {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Surface(
+                                color = Color(0xFFFEF2F2),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp)) {
+                                    Text(
+                                        text = "❌ Cancelled: ${order.cancellationReason.ifBlank { "Customer Request" }}",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF991B1B)
+                                    )
+                                    if (order.refundAmount > 0) {
+                                        Text("💰 Refund: ₹${order.refundAmount.toInt()} (100%) initiated", fontSize = 10.5.sp, color = VegGreen, fontWeight = FontWeight.Bold)
+                                    } else if (order.companyAdsFundAmount > 0) {
+                                        Text("📣 Advance deposited to Platform Offers Fund (0% Return)", fontSize = 10.5.sp, color = Color(0xFF92400E))
+                                    } else if (order.kitchenSettlementAmount > 0) {
+                                        Text("👨‍🍳 Kitchen raw material settlement: ₹${order.kitchenSettlementAmount.toInt()} (0% Customer Return)", fontSize = 10.5.sp, color = Color(0xFF475569))
+                                    }
+                                }
+                            }
+                        }
+
+                        // Rescheduled lock notice
+                        if (order.isRescheduled || order.isNonCancellable) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Surface(color = Color(0xFFEFF6FF), shape = RoundedCornerShape(4.dp)) {
+                                Text(
+                                    text = "🔒 Rescheduled (100% Full Payment Locked • Non-cancellable)",
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF1D4ED8),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(10.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            // Cancel Order Button for Active Eligible Orders
+                            if (order.orderStatus.name != "DELIVERED" &&
+                                order.orderStatus.name != "CANCELLED" &&
+                                order.orderStatus.name != "OUT_FOR_DELIVERY" &&
+                                !order.isNonCancellable
+                            ) {
+                                OutlinedButton(
+                                    onClick = { orderForCancellation = order },
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFDC2626)),
+                                    border = BorderStroke(1.dp, Color(0xFFFCA5A5)),
+                                    shape = RoundedCornerShape(6.dp),
+                                    modifier = Modifier
+                                        .height(34.dp)
+                                        .padding(end = 8.dp)
+                                        .testTag("cancel_order_btn_${order.orderId}")
+                                ) {
+                                    Text("Cancel / Reschedule", fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+
                             if (order.orderStatus.name == "DELIVERED") {
                                 OutlinedButton(
                                     onClick = { onRateKitchen(order.orderId) },
@@ -940,7 +1210,7 @@ fun CustomerOrdersScreen(
                                     .testTag("track_order_btn_${order.orderId}")
                             ) {
                                 Text(
-                                    text = if (order.orderStatus.name == "DELIVERED") "View Delivery Summary" else "🔴 Track Live Order",
+                                    text = if (order.orderStatus.name == "DELIVERED") "View Summary" else "🔴 Track Live Order",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -949,6 +1219,35 @@ fun CustomerOrdersScreen(
                     }
                 }
             }
+        }
+
+        // Customer Cancellation Dialog
+        orderForCancellation?.let { ord ->
+            CustomerCancellationDialog(
+                order = ord,
+                onDismiss = { orderForCancellation = null },
+                onConfirmCancel = { reason ->
+                    viewModel.cancelOrderByCustomer(ord.orderId, reason)
+                    orderForCancellation = null
+                },
+                onSwitchToReschedule = {
+                    val target = ord
+                    orderForCancellation = null
+                    orderForReschedule = target
+                }
+            )
+        }
+
+        // Customer Reschedule Dialog
+        orderForReschedule?.let { ord ->
+            CustomerRescheduleDialog(
+                order = ord,
+                onDismiss = { orderForReschedule = null },
+                onConfirmReschedule = { newDate, newSlot ->
+                    viewModel.rescheduleOrderByCustomer(ord.orderId, newDate, newSlot)
+                    orderForReschedule = null
+                }
+            )
         }
     }
 }

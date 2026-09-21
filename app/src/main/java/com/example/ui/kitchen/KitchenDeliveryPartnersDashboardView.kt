@@ -10,9 +10,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -73,6 +75,7 @@ fun KitchenDeliveryPartnersDashboardView(
     var inputAadhaar by remember { mutableStateOf("") }
     var inputDl by remember { mutableStateOf("") }
     var inputIsOnline by remember { mutableStateOf(true) }
+    var inputIsMobileVerified by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf("") }
 
     // Dialog state for Delete Confirmation
@@ -167,6 +170,7 @@ fun KitchenDeliveryPartnersDashboardView(
                             inputAadhaar = ""
                             inputDl = ""
                             inputIsOnline = true
+                            inputIsMobileVerified = false
                             formError = ""
                             showAddEditDialog = true
                         },
@@ -386,6 +390,7 @@ fun KitchenDeliveryPartnersDashboardView(
                                 inputAadhaar = ""
                                 inputDl = ""
                                 inputIsOnline = true
+                                inputIsMobileVerified = false
                                 formError = ""
                                 showAddEditDialog = true
                             },
@@ -429,6 +434,7 @@ fun KitchenDeliveryPartnersDashboardView(
                         inputAadhaar = partner.aadhaarNumber
                         inputDl = partner.drivingLicence
                         inputIsOnline = partner.isOnline
+                        inputIsMobileVerified = partner.isMobileVerified
                         formError = ""
                         showAddEditDialog = true
                     },
@@ -504,6 +510,7 @@ fun KitchenDeliveryPartnersDashboardView(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
                         .padding(vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -541,9 +548,23 @@ fun KitchenDeliveryPartnersDashboardView(
                     // 2. Mobile Phone (Compulsory)
                     OutlinedTextField(
                         value = inputMobile,
-                        onValueChange = { inputMobile = it.filter { char -> char.isDigit() || char == '+' || char == ' ' }; formError = "" },
+                        onValueChange = {
+                            inputMobile = it.filter { char -> char.isDigit() || char == '+' || char == ' ' }
+                            inputIsMobileVerified = false
+                            formError = ""
+                        },
                         label = { Text("Mobile Phone Number * (Compulsory)") },
                         leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = Color.Gray) },
+                        trailingIcon = {
+                            if (inputIsMobileVerified) {
+                                Icon(
+                                    Icons.Default.CheckCircle,
+                                    contentDescription = "Verified",
+                                    tint = VegGreen,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                         singleLine = true,
                         modifier = Modifier
@@ -612,6 +633,19 @@ fun KitchenDeliveryPartnersDashboardView(
                         )
                     }
 
+                    // OTP Verification Section AT THE BOTTOM OF THE FORM
+                    DeliveryBoyOtpVerificationSection(
+                        mobileNumber = inputMobile,
+                        isVerified = inputIsMobileVerified,
+                        onVerificationSuccess = {
+                            inputIsMobileVerified = true
+                            formError = ""
+                        },
+                        onResetVerification = {
+                            inputIsMobileVerified = false
+                        }
+                    )
+
                     Text(
                         text = "ℹ️ Note: Aadhaar card, mobile number aur name compulsory hain. Driving licence optional hai. Only your kitchen can edit or remove this staff member.",
                         fontSize = 10.5.sp,
@@ -642,6 +676,12 @@ fun KitchenDeliveryPartnersDashboardView(
                             return@Button
                         }
 
+                        // Check OTP verification status: compulsory before saving
+                        if (!inputIsMobileVerified) {
+                            formError = "⚠️ Mobile number verify nahi hua hai! Kripya 'SEND OTP' karke check karein ki mobile number sahi hai ya galat."
+                            return@Button
+                        }
+
                         if (editingPartner != null) {
                             // Ensure only the owner kitchen updates their staff
                             val updated = editingPartner!!.copy(
@@ -649,7 +689,8 @@ fun KitchenDeliveryPartnersDashboardView(
                                 mobile = cleanMobile,
                                 aadhaarNumber = cleanAadhaar,
                                 drivingLicence = cleanDl,
-                                isOnline = inputIsOnline
+                                isOnline = inputIsOnline,
+                                isMobileVerified = inputIsMobileVerified
                             )
                             viewModel.updateDeliveryBoy(updated)
                             Toast.makeText(context, "Delivery partner '${cleanName}' updated successfully! ✏️", Toast.LENGTH_SHORT).show()
@@ -667,7 +708,8 @@ fun KitchenDeliveryPartnersDashboardView(
                                 isBusy = false,
                                 todayCompletedDeliveries = 0,
                                 cashToSubmit = 0.0,
-                                pendingBartanCount = 0
+                                pendingBartanCount = 0,
+                                isMobileVerified = inputIsMobileVerified
                             )
                             viewModel.addDeliveryBoy(newPartner)
                             Toast.makeText(context, "Delivery partner '${cleanName}' registered under kitchen! ✅", Toast.LENGTH_SHORT).show()

@@ -103,15 +103,25 @@ fun CustomerOrderSummaryScreen(
     deliveryDate: String,
     deliveryTimeSlot: String,
     customerPhone: String,
+    is30PercentAdvance: Boolean = true,
+    deliveryFee: Double = 0.0,
+    distanceKm: Double = 2.4,
+    isDeliveryChargeEnabled: Boolean = false,
+    deliveryChargePerKm: Double = 0.0,
     onBack: () -> Unit,
-    onProceedToPayment: () -> Unit,
+    onProceedToPayment: (finalCalculatedTotal: Double, deliveryFee: Double) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val itemTotal = items.sumOf { it.pricePerUnit * it.quantity }
-    val deliveryFee = 30.0
-    val packingFee = 20.0
+    // User requested: No packing charges. Delivery charge is optional and configured per km by the caterer partner
+    val effectiveDeliveryFee = if (isDeliveryChargeEnabled && deliveryChargePerKm > 0.0) {
+        val dist = if (distanceKm > 0.0) distanceKm else 2.5
+        kotlin.math.round(dist * deliveryChargePerKm)
+    } else {
+        deliveryFee
+    }
     val discountSaved = 60.0
-    val finalCalculatedTotal = (itemTotal + deliveryFee + packingFee).coerceAtLeast(totalAmount)
+    val finalCalculatedTotal = itemTotal + effectiveDeliveryFee
 
     Column(
         modifier = modifier
@@ -257,19 +267,20 @@ fun CustomerOrderSummaryScreen(
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Delivery Charges", fontSize = 13.sp, color = Color.Gray)
-                            Text("₹${deliveryFee.toInt()}", fontSize = 13.sp)
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Packing Charges", fontSize = 13.sp, color = Color.Gray)
-                            Text("₹${packingFee.toInt()}", fontSize = 13.sp)
+                            Column {
+                                Text("Delivery Charges", fontSize = 13.sp, color = Color.Gray)
+                                if (isDeliveryChargeEnabled && deliveryChargePerKm > 0.0) {
+                                    Text("(${distanceKm} km × ₹${deliveryChargePerKm.toInt()}/km)", fontSize = 11.sp, color = Color.Gray)
+                                }
+                            }
+                            if (effectiveDeliveryFee <= 0.0) {
+                                Text("FREE 🌿 (मुफ़्त)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = VegGreen)
+                            } else {
+                                Text("₹${effectiveDeliveryFee.toInt()}", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                         Spacer(modifier = Modifier.height(10.dp))
                         HorizontalDivider(color = Color(0xFFE2E8F0))
@@ -279,8 +290,39 @@ fun CustomerOrderSummaryScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("Total Amount", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
-                            Text("₹${finalCalculatedTotal.toInt()}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = SaffronPrimary)
+                            Text("Total Order Value", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                            Text("₹${finalCalculatedTotal.toInt()}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F172A))
+                        }
+
+                        if (is30PercentAdvance) {
+                            val adv = finalCalculatedTotal * 0.50
+                            val bal = finalCalculatedTotal - adv
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("50% Advance Payable Today", fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = SaffronPrimary)
+                                Text("₹${adv.toInt()}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = SaffronPrimary)
+                            }
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Remaining 50% Balance on Delivery", fontSize = 12.sp, color = Color.Gray)
+                                Text("₹${bal.toInt()}", fontSize = 12.sp, color = Color.Gray)
+                            }
+                        } else {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("100% Full Payment Selected", fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = VegGreen)
+                                Text("₹${finalCalculatedTotal.toInt()}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = VegGreen)
+                            }
+                            Text("✅ Zero balance on delivery (Fully Paid)", fontSize = 11.sp, color = VegGreen)
                         }
 
                         Spacer(modifier = Modifier.height(12.dp))
@@ -311,6 +353,7 @@ fun CustomerOrderSummaryScreen(
         }
 
         // Bottom CTA Button
+        val payableAmount = if (is30PercentAdvance) finalCalculatedTotal * 0.50 else finalCalculatedTotal
         Surface(color = Color.White, shadowElevation = 8.dp, modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier
@@ -320,17 +363,21 @@ fun CustomerOrderSummaryScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("Total Payable", fontSize = 11.sp, color = Color.Gray)
-                    Text("₹${finalCalculatedTotal.toInt()}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = SaffronPrimary)
+                    Text(if (is30PercentAdvance) "50% Advance Payable" else "100% Full Payable", fontSize = 11.sp, color = Color.Gray)
+                    Text("₹${payableAmount.toInt()}", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = SaffronPrimary)
                 }
 
                 Button(
-                    onClick = onProceedToPayment,
+                    onClick = { onProceedToPayment(finalCalculatedTotal, effectiveDeliveryFee) },
                     colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.testTag("summary_continue_to_payment_btn")
                 ) {
-                    Text("Continue to Payment 👉", fontSize = 14.5.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (is30PercentAdvance) "Continue to 50% Advance 👉" else "Continue to 100% Payment 👉",
+                        fontSize = 14.5.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }

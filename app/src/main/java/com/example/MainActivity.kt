@@ -74,6 +74,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        try {
+            java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Kolkata"))
+            java.util.Locale.setDefault(java.util.Locale("en", "IN"))
+        } catch (_: Exception) {}
         enableEdgeToEdge()
         handleDeepLink(intent)
 
@@ -140,6 +144,10 @@ fun CaterersWaleApp(viewModel: CaterersViewModel) {
 
     val cartTotalAmount by viewModel.cartTotalAmount.collectAsState()
     val orders by viewModel.ordersList.collectAsState()
+    val kitchenSettings by viewModel.kitchenSettings.collectAsState()
+    val caterersList by viewModel.caterersList.collectAsState()
+    var finalOrderCalculatedAmount by remember { mutableStateOf(0.0) }
+    var finalOrderDeliveryFee by remember { mutableStateOf(0.0) }
 
     Scaffold(
         modifier = Modifier
@@ -249,10 +257,13 @@ fun CaterersWaleApp(viewModel: CaterersViewModel) {
                             }
 
                             CustomerScreen.ADDRESS -> {
+                                val currentLoc by viewModel.deliveryLocation.collectAsState()
                                 AddressScreen(
                                     onBack = { customerScreen = CustomerScreen.CART },
                                     initialPhone = customerPhone,
                                     initialAltPhone = alternatePhone,
+                                    defaultAddress = currentLoc,
+                                    is30PercentAdvance = is30PercentAdvance,
                                     onProceedToPayment = { addr, phone, altPhone ->
                                         selectedAddress = addr
                                         customerPhone = phone
@@ -264,6 +275,8 @@ fun CaterersWaleApp(viewModel: CaterersViewModel) {
 
                             CustomerScreen.ORDER_SUMMARY -> {
                                 val cartItems = viewModel.cartItemsList.value
+                                val catererId = cartItems.firstOrNull()?.catererId
+                                val currentCaterer = caterersList.find { it.id == catererId }
                                 val catererName = cartItems.firstOrNull()?.catererName ?: "A1 Huma Caterers"
                                 CustomerOrderSummaryScreen(
                                     catererName = catererName,
@@ -273,14 +286,24 @@ fun CaterersWaleApp(viewModel: CaterersViewModel) {
                                     deliveryDate = selectedDate,
                                     deliveryTimeSlot = selectedTimeSlot,
                                     customerPhone = customerPhone,
+                                    is30PercentAdvance = is30PercentAdvance,
+                                    deliveryFee = 0.0,
+                                    distanceKm = currentCaterer?.distanceKm ?: 2.4,
+                                    isDeliveryChargeEnabled = kitchenSettings.isDeliveryChargeEnabled,
+                                    deliveryChargePerKm = kitchenSettings.deliveryChargePerKm,
                                     onBack = { customerScreen = CustomerScreen.ADDRESS },
-                                    onProceedToPayment = { customerScreen = CustomerScreen.PAYMENT }
+                                    onProceedToPayment = { calculatedTotal, deliveryFee ->
+                                        finalOrderCalculatedAmount = calculatedTotal
+                                        finalOrderDeliveryFee = deliveryFee
+                                        customerScreen = CustomerScreen.PAYMENT
+                                    }
                                 )
                             }
 
                             CustomerScreen.PAYMENT -> {
+                                val effectivePaymentAmount = if (finalOrderCalculatedAmount > 0.0) finalOrderCalculatedAmount else cartTotalAmount
                                 PaymentScreen(
-                                    totalAmount = cartTotalAmount,
+                                    totalAmount = effectivePaymentAmount,
                                     is30PercentAdvance = is30PercentAdvance,
                                     deliveryAddress = selectedAddress,
                                     customerPhone = customerPhone,
@@ -306,7 +329,7 @@ fun CaterersWaleApp(viewModel: CaterersViewModel) {
                                             catererId = catererId,
                                             catererName = catererName,
                                             itemsSummary = itemsSummary,
-                                            totalAmount = cartTotalAmount,
+                                            totalAmount = effectivePaymentAmount,
                                             is30PercentAdvance = is30PercentAdvance,
                                             paymentMethod = method,
                                             deliveryDate = selectedDate,
@@ -323,8 +346,19 @@ fun CaterersWaleApp(viewModel: CaterersViewModel) {
                             CustomerScreen.ORDER_CONFIRMATION -> {
                                 OrderConfirmationScreen(
                                     orderId = confirmedOrderId,
-                                    onTrackOrder = { customerScreen = CustomerScreen.LIVE_TRACKING },
-                                    onGoHome = { customerScreen = CustomerScreen.HOME }
+                                    viewModel = viewModel,
+                                    onTrackOrder = {
+                                        viewModel.showFeedback("⚡ Opening Live GPS Tracking for #$confirmedOrderId...")
+                                        customerScreen = CustomerScreen.LIVE_TRACKING
+                                    },
+                                    onViewOrders = {
+                                        viewModel.showFeedback("Opening My Catering Bookings...")
+                                        customerScreen = CustomerScreen.ORDERS
+                                    },
+                                    onGoHome = {
+                                        viewModel.showFeedback("Welcome back to Home")
+                                        customerScreen = CustomerScreen.HOME
+                                    }
                                 )
                             }
 
@@ -424,13 +458,13 @@ fun CaterersWaleApp(viewModel: CaterersViewModel) {
             }
         }
 
-        // Global Notification / Toast Feedback
+        // Global Notification / Toast Feedback (Positioned at TopCenter so it never blocks CTA buttons)
             NotificationFeedbackToast(
                 message = feedbackMessage,
                 onDismiss = { viewModel.clearFeedback() },
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 20.dp)
+                    .align(Alignment.TopCenter)
+                    .padding(top = 10.dp)
             )
         }
     }

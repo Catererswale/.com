@@ -10,6 +10,7 @@ import com.example.data.models.CatererEntity
 import com.example.data.models.CateringAddOn
 import com.example.data.models.DeliveryBoyEntity
 import com.example.data.models.FoodType
+import com.example.data.models.KitchenUtensilEntity
 import com.example.data.models.KycStatus
 import com.example.data.models.Language
 import com.example.data.models.MenuItemEntity
@@ -18,6 +19,7 @@ import com.example.data.models.OrderEntity
 import com.example.data.models.OrderStatus
 import com.example.data.models.PartnerReviewEntity
 import com.example.data.models.PaymentMethod
+import com.example.data.models.PaymentStatus
 import com.example.data.models.UserProfile
 import com.example.data.models.UserRole
 import com.example.data.models.KitchenSettingsConfig
@@ -28,7 +30,11 @@ import com.example.data.repository.FirestoreConfigRepository
 import com.example.data.repository.FirestoreFavoritesRepository
 import com.example.data.repository.SettlementRepository
 import com.example.data.service.SettlementEngineService
+import com.example.util.CancellationAlertData
+import com.example.util.CancellationTier
+import com.example.util.KitchenOrderSoundAlertManager
 import com.example.util.NotificationHelper
+import com.example.util.TimeSlotUtils
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -118,9 +124,98 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
     private val _selectedCategory = MutableStateFlow("All")
     val selectedCategory: StateFlow<String> = _selectedCategory.asStateFlow()
 
+    // Customer Dietary Preference Filter: "ALL", "VEG", "NON_VEG"
+    private val _customerDietFilter = MutableStateFlow("ALL")
+    val customerDietFilter: StateFlow<String> = _customerDietFilter.asStateFlow()
+
+    fun setCustomerDietFilter(diet: String) {
+        _customerDietFilter.value = diet
+        if (diet == "VEG") {
+            _isVegMode.value = true
+        } else if (diet == "ALL" || diet == "NON_VEG") {
+            _isVegMode.value = false
+        }
+    }
+
+    // Zomato-style Veg Mode Settings:
+    // isVegMode: True when customer has toggled on Veg Mode
+    private val _isVegMode = MutableStateFlow(false)
+    val isVegMode: StateFlow<Boolean> = _isVegMode.asStateFlow()
+
+    // vegModeScope: "ALL_RESTAURANTS" (Veg from all kitchens) vs "PURE_VEG_ONLY" (Only 100% Pure Veg kitchens)
+    private val _vegModeScope = MutableStateFlow("ALL_RESTAURANTS")
+    val vegModeScope: StateFlow<String> = _vegModeScope.asStateFlow()
+
+    // vegModeDays: "ALL_DAYS" or selected day letters e.g. setOf("TUE", "THU", "SAT")
+    private val _vegModeDaysMode = MutableStateFlow("ALL_DAYS") // "ALL_DAYS" or "CUSTOM_DAYS"
+    val vegModeDaysMode: StateFlow<String> = _vegModeDaysMode.asStateFlow()
+
+    private val _selectedVegDays = MutableStateFlow(setOf("M", "T", "W", "T", "F", "S", "S"))
+    val selectedVegDays: StateFlow<Set<String>> = _selectedVegDays.asStateFlow()
+
+    fun setVegMode(enabled: Boolean, scope: String = _vegModeScope.value, daysMode: String = _vegModeDaysMode.value) {
+        _isVegMode.value = enabled
+        _vegModeScope.value = scope
+        _vegModeDaysMode.value = daysMode
+        if (enabled) {
+            _customerDietFilter.value = "VEG"
+        } else {
+            _customerDietFilter.value = "ALL"
+        }
+    }
+
+    fun setVegModeScope(scope: String) {
+        _vegModeScope.value = scope
+        if (_isVegMode.value) {
+            _customerDietFilter.value = "VEG"
+        }
+    }
+
+    fun setVegModeDaysMode(daysMode: String) {
+        _vegModeDaysMode.value = daysMode
+    }
+
+    fun toggleVegDay(day: String) {
+        val current = _selectedVegDays.value.toMutableSet()
+        if (current.contains(day)) {
+            if (current.size > 1) current.remove(day)
+        } else {
+            current.add(day)
+        }
+        _selectedVegDays.value = current
+    }
+
     // Delivery Location
     private val _deliveryLocation = MutableStateFlow("Okhla Phase 3, New Delhi")
     val deliveryLocation: StateFlow<String> = _deliveryLocation.asStateFlow()
+
+    // Advanced Discovery & Search Filters: Delivery Time, Budget, Rating
+    private val _filterMaxDeliveryTime = MutableStateFlow<Int?>(null) // e.g. 45 min
+    val filterMaxDeliveryTime: StateFlow<Int?> = _filterMaxDeliveryTime.asStateFlow()
+
+    private val _filterMaxBudget = MutableStateFlow<Double?>(null) // e.g. 1500.0
+    val filterMaxBudget: StateFlow<Double?> = _filterMaxBudget.asStateFlow()
+
+    private val _filterMinRating = MutableStateFlow<Float?>(null) // e.g. 4.8f
+    val filterMinRating: StateFlow<Float?> = _filterMinRating.asStateFlow()
+
+    fun setFilterMaxDeliveryTime(mins: Int?) {
+        _filterMaxDeliveryTime.value = mins
+    }
+
+    fun setFilterMaxBudget(budget: Double?) {
+        _filterMaxBudget.value = budget
+    }
+
+    fun setFilterMinRating(rating: Float?) {
+        _filterMinRating.value = rating
+    }
+
+    fun clearAllAdvancedFilters() {
+        _filterMaxDeliveryTime.value = null
+        _filterMaxBudget.value = null
+        _filterMinRating.value = null
+    }
 
     // Selected Caterer for Detail View
     private val _selectedCatererId = MutableStateFlow<String?>("caterer_1")
@@ -222,6 +317,9 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
     val bartanRecordsList: StateFlow<List<BartanRecordEntity>> = repository.allBartanRecords
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val kitchenUtensilsList: StateFlow<List<KitchenUtensilEntity>> = repository.getUtensilsByKitchen("caterer_1")
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val notificationsList: StateFlow<List<NotificationEntity>> = repository.allNotifications
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -240,22 +338,92 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Filtered Caterers based on search & category
+    // Filtered Caterers based on search, category, location, dietary preference, Veg Mode & advanced discovery filters
     val filteredCaterers: StateFlow<List<CatererEntity>> = combine(
         caterersList,
         _searchQuery,
         _selectedCategory,
-        _favoriteKitchenIds
-    ) { list, query, category, favorites ->
+        _favoriteKitchenIds,
+        _customerDietFilter,
+        _deliveryLocation,
+        _isVegMode,
+        _vegModeScope,
+        _filterMaxDeliveryTime,
+        _filterMaxBudget,
+        _filterMinRating
+    ) { args: Array<Any?> ->
+        @Suppress("UNCHECKED_CAST")
+        val list = args[0] as List<CatererEntity>
+        val query = args[1] as String
+        val category = args[2] as String
+        @Suppress("UNCHECKED_CAST")
+        val favorites = args[3] as Set<String>
+        val dietFilter = args[4] as String
+        val location = args[5] as String
+        val isVegModeActive = args[6] as Boolean
+        val vegScope = args[7] as String
+        val maxDeliveryTime = args[8] as? Int
+        val maxBudget = args[9] as? Double
+        val minRating = args[10] as? Float
+
         var result = list
+
+        // Veg Mode Filtering (Zomato-style: All Restaurants vs Pure Veg Restaurants only)
+        if (isVegModeActive) {
+            if (vegScope == "PURE_VEG_ONLY") {
+                // Strictly 100% Pure Veg kitchens
+                result = result.filter { it.dietaryType.equals("PURE_VEG", ignoreCase = true) }
+            } else {
+                // All restaurants with veg offerings (exclude strict Non-Veg only specialists)
+                result = result.filter { !it.dietaryType.equals("NON_VEG", ignoreCase = true) }
+            }
+        } else if (dietFilter == "VEG") {
+            result = result.filter { !it.dietaryType.equals("NON_VEG", ignoreCase = true) }
+        } else if (dietFilter == "NON_VEG") {
+            result = result.filter { !it.dietaryType.equals("PURE_VEG", ignoreCase = true) }
+        }
+
+        // Advanced Search & Discovery Filters
+        if (maxDeliveryTime != null && maxDeliveryTime > 0) {
+            result = result.filter { it.deliveryTimeMinutes <= maxDeliveryTime }
+        }
+        if (maxBudget != null && maxBudget > 0.0) {
+            result = result.filter { it.minOrderAmount <= maxBudget }
+        }
+        if (minRating != null && minRating > 0f) {
+            result = result.filter { it.rating >= minRating }
+        }
+
         if (category.equals("Favorites", ignoreCase = true) || category.contains("Favorite", ignoreCase = true)) {
             result = result.filter { favorites.contains(it.id) }
         }
+        // Location relevance matching (if location selected, prioritize or filter matching kitchens)
+        if (location.isNotBlank()) {
+            val locKeywords = location.split(",", " ")
+                .map { it.trim().lowercase() }
+                .filter { it.length > 2 && it != "new" && it != "delhi" && it != "road" && it != "sector" }
+            val matching = result.filter { caterer ->
+                val addr = caterer.address.lowercase()
+                locKeywords.any { kw -> addr.contains(kw) }
+            }
+            // If matching kitchens exist in that area, sort/show them first
+            if (matching.isNotEmpty()) {
+                val nonMatching = result.filterNot { matching.contains(it) }
+                result = matching + nonMatching
+            }
+        }
         if (query.isNotBlank()) {
-            result = result.filter {
-                it.name.contains(query, ignoreCase = true) ||
-                it.kitchenName.contains(query, ignoreCase = true) ||
-                it.address.contains(query, ignoreCase = true)
+            val q = query.trim().lowercase()
+            val isVegIntent = q.contains("only veg") || q.contains("pure veg") || q.contains("veg caterer") || q.contains("veg only") || q.contains("shakahari") || q == "veg"
+            if (isVegIntent) {
+                result = result.filter { it.dietaryType.equals("PURE_VEG", ignoreCase = true) }
+            } else {
+                result = result.filter {
+                    it.name.contains(query, ignoreCase = true) ||
+                    it.kitchenName.contains(query, ignoreCase = true) ||
+                    it.address.contains(query, ignoreCase = true) ||
+                    it.dietaryType.contains(query, ignoreCase = true)
+                }
             }
         }
         result
@@ -506,22 +674,296 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
                 message = "New order $orderId received for ₹${totalAmount.toInt()} from $customerName."
             )
 
+            // Trigger loud real-time audio alarm for Kitchen Partner if enabled
+            val currentSettings = _kitchenSettings.value
+            if (currentSettings.isOrderSoundAlertEnabled) {
+                val createdOrder = repository.getOrderById(orderId) ?: OrderEntity(
+                    orderId = orderId,
+                    customerName = customerName,
+                    customerMobile = customerMobile,
+                    deliveryAddress = address,
+                    catererId = catererId,
+                    catererName = catererName,
+                    itemsSummary = itemsSummary,
+                    totalAmount = totalAmount,
+                    advancePaidAmount = if (is30PercentAdvance) totalAmount * (currentSettings.defaultAdvancePercentage / 100.0) else (customAdvanceAmount ?: 0.0),
+                    balanceAmount = totalAmount - (if (is30PercentAdvance) totalAmount * (currentSettings.defaultAdvancePercentage / 100.0) else (customAdvanceAmount ?: 0.0)),
+                    paymentMethod = paymentMethod,
+                    paymentStatus = PaymentStatus.ADVANCE_PAID_30,
+                    orderStatus = OrderStatus.NEW,
+                    deliveryDate = deliveryDate,
+                    deliveryTimeSlot = deliveryTimeSlot
+                )
+                KitchenOrderSoundAlertManager.triggerOrderAlert(getApplication(), createdOrder)
+            }
+
             showFeedback("Order $orderId placed successfully! 🎉")
             onSuccess(orderId)
         }
     }
 
+    fun triggerKitchenAlarmTest() {
+        // Trigger high-alert incoming order alarm with test order so kitchen can test tone & accept/reject popup
+        val sampleOrder = ordersList.value.firstOrNull { it.orderStatus == OrderStatus.NEW }
+            ?: ordersList.value.firstOrNull()
+            ?: OrderEntity(
+                orderId = "ORD-" + System.currentTimeMillis().toString().takeLast(6),
+                customerName = "Rohan Verma",
+                customerMobile = "+91 98765 43210",
+                deliveryAddress = "Bandra West, Mumbai - 400050",
+                catererId = "cat_1",
+                catererName = "A1 Huma Central Kitchen",
+                itemsSummary = "Hyderabadi Chicken Biryani (50 Pax), Mirchi Salan, Boondi Raita, Gulab Jamun",
+                totalAmount = 14500.0,
+                advancePaidAmount = 7250.0,
+                balanceAmount = 7250.0,
+                paymentMethod = PaymentMethod.UPI,
+                paymentStatus = PaymentStatus.ADVANCE_PAID_30,
+                orderStatus = OrderStatus.NEW,
+                deliveryDate = TimeSlotUtils.createDateFormat("yyyy-MM-dd").format(TimeSlotUtils.getIndianCalendar().time),
+                deliveryTimeSlot = "11:00 AM - 02:00 PM (Lunch)"
+            )
+        KitchenOrderSoundAlertManager.triggerOrderAlert(getApplication(), sampleOrder)
+        showFeedback("🚨 High-Alert Incoming Order Tone & Accept/Reject Popup Active!")
+    }
+
+    fun stopKitchenAlarm() {
+        KitchenOrderSoundAlertManager.stopAlert()
+        showFeedback("🔕 Kitchen audio alarm muted.")
+    }
+
+    fun muteKitchenToneOnly() {
+        KitchenOrderSoundAlertManager.muteSoundOnly()
+        showFeedback("🔇 High-alert tone muted. Please Accept or Reject the order.")
+    }
+
+    fun acceptOrderByKitchen(orderId: String) {
+        viewModelScope.launch {
+            val order = repository.getOrderById(orderId)
+            if (order != null) {
+                val updated = order.copy(orderStatus = OrderStatus.ACCEPTED)
+                repository.updateOrder(updated)
+                repository.updateOrderStatus(orderId, OrderStatus.ACCEPTED, getApplication())
+                KitchenOrderSoundAlertManager.stopAlert()
+                showFeedback("✅ Order #${order.orderId.takeLast(6).uppercase()} Accepted! Kitchen KOT generated.")
+            } else {
+                repository.updateOrderStatus(orderId, OrderStatus.ACCEPTED, getApplication())
+                KitchenOrderSoundAlertManager.stopAlert()
+                showFeedback("✅ Order Accepted!")
+            }
+        }
+    }
+
+    fun rejectOrderByKitchen(orderId: String, reason: String) {
+        viewModelScope.launch {
+            val order = repository.getOrderById(orderId)
+            if (order != null) {
+                val updated = order.copy(
+                    orderStatus = OrderStatus.CANCELLED,
+                    cancellationReason = "Kitchen Rejected: $reason",
+                    refundAmount = order.advancePaidAmount,
+                    kitchenSettlementAmount = 0.0,
+                    companyAdsFundAmount = 0.0,
+                    paymentStatus = if (order.advancePaidAmount > 0) PaymentStatus.REFUNDED else order.paymentStatus
+                )
+                repository.updateOrder(updated)
+                repository.updateOrderStatus(orderId, OrderStatus.CANCELLED, getApplication())
+                KitchenOrderSoundAlertManager.stopAlert()
+                showFeedback("❌ Order #${order.orderId.takeLast(6).uppercase()} Rejected. Full Customer Refund (₹${order.advancePaidAmount.toInt()}) Initiated.")
+            } else {
+                repository.updateOrderStatus(orderId, OrderStatus.CANCELLED, getApplication())
+                KitchenOrderSoundAlertManager.stopAlert()
+                showFeedback("❌ Order Rejected.")
+            }
+        }
+    }
+
     fun updateOrderStatus(orderId: String, status: OrderStatus) {
         viewModelScope.launch {
+            if (status == OrderStatus.PREPARING) {
+                val order = repository.getOrderById(orderId)
+                if (order != null) {
+                    val isAllowed = TimeSlotUtils.isKitchenPrepAllowed(order.deliveryDate, order.deliveryTimeSlot)
+                    if (!isAllowed) {
+                        val countdown = TimeSlotUtils.getKitchenPrepCountdownLabel(order.deliveryDate, order.deliveryTimeSlot)
+                        showFeedback("⚠️ Freshness Lock: Kitchen can only start cooking 10 hours before delivery! ($countdown)")
+                        return@launch
+                    }
+                    val updated = order.copy(
+                        orderStatus = OrderStatus.PREPARING,
+                        prepStartedTimestamp = System.currentTimeMillis()
+                    )
+                    repository.updateOrder(updated)
+                    repository.updateOrderStatus(orderId, status, getApplication())
+                    if (KitchenOrderSoundAlertManager.currentAlertOrder.value?.orderId == orderId) {
+                        KitchenOrderSoundAlertManager.stopAlert()
+                    }
+                    showFeedback("🍳 Cooking started for Order $orderId! Payout eligibility activated.")
+                    return@launch
+                }
+            }
             repository.updateOrderStatus(orderId, status, getApplication())
+            if (KitchenOrderSoundAlertManager.currentAlertOrder.value?.orderId == orderId) {
+                KitchenOrderSoundAlertManager.stopAlert()
+            }
             showFeedback("Order $orderId status updated to ${status.name}")
         }
     }
 
-    fun assignDeliveryBoy(orderId: String, boy: DeliveryBoyEntity) {
+    /**
+     * Customer Order Cancellation adhering to the 3-Tier Policy:
+     * - Same Day: 0% customer refund. Kitchen receives advance settlement minus 10% platform commission.
+     * - > 24 Hours: 100% full refund to customer. Kitchen alerted with urgent alarm siren.
+     * - 12 to 24 Hours: No cash return. Advance deposited to Company Ads & Offers Fund.
+     * - < 12 Hours: 0% customer refund. Advance minus 10% commission settled to kitchen.
+     */
+    fun cancelOrderByCustomer(
+        orderId: String,
+        reason: String,
+        onCompleted: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
         viewModelScope.launch {
-            repository.assignDeliveryBoy(orderId, boy, getApplication())
-            showFeedback("Assigned ${boy.name} to Order $orderId")
+            val order = repository.getOrderById(orderId)
+            if (order == null) {
+                showFeedback("Order not found")
+                onCompleted(false, "Order not found")
+                return@launch
+            }
+            if (order.isNonCancellable || order.orderStatus == OrderStatus.OUT_FOR_DELIVERY || order.orderStatus == OrderStatus.DELIVERED) {
+                val lockMsg = "Order cannot be cancelled: Already locked with 100% full payment or out for delivery."
+                showFeedback(lockMsg)
+                onCompleted(false, lockMsg)
+                return@launch
+            }
+
+            val policy = TimeSlotUtils.evaluateCancellationPolicy(order)
+            val updatedOrder = order.copy(
+                orderStatus = OrderStatus.CANCELLED,
+                cancellationReason = reason,
+                refundAmount = policy.customerRefundAmount,
+                kitchenSettlementAmount = policy.kitchenSettlementAmount,
+                companyAdsFundAmount = policy.companyAdsFundAmount,
+                paymentStatus = if (policy.customerRefundAmount > 0) PaymentStatus.REFUNDED else order.paymentStatus
+            )
+
+            repository.updateOrder(updatedOrder)
+
+            // Trigger loud audio alarm/siren for Kitchen Partner
+            KitchenOrderSoundAlertManager.triggerCancellationAlert(
+                context = getApplication(),
+                alertData = CancellationAlertData(
+                    order = updatedOrder,
+                    reason = reason,
+                    policyExplanation = policy.policyExplanation,
+                    customerRefund = policy.customerRefundAmount,
+                    kitchenSettlement = policy.kitchenSettlementAmount,
+                    companyFund = policy.companyAdsFundAmount,
+                    isSameDay = policy.isSameDay
+                )
+            )
+
+            val custNotifMsg = when (policy.tier) {
+                CancellationTier.MORE_THAN_24_HOURS_FULL_REFUND ->
+                    "100% Refund (₹${policy.customerRefundAmount.toInt()}) processed for Order #${order.orderId}."
+                CancellationTier.BETWEEN_12_AND_24_HOURS_RESCHEDULE_OR_FORFEIT ->
+                    "Order #${order.orderId} cancelled. Advance deposited into Company Ads & Offers Fund."
+                CancellationTier.SAME_DAY_NO_REFUND ->
+                    "Same-day Order #${order.orderId} cancelled. ₹0 customer refund. Kitchen settlement credited."
+                CancellationTier.LESS_THAN_12_HOURS_NO_REFUND ->
+                    "Order #${order.orderId} cancelled (<12h). ₹0 customer refund. Kitchen compensated for preparation."
+            }
+
+            NotificationHelper.showSystemNotification(
+                context = getApplication(),
+                title = "Order #${order.orderId} Cancelled",
+                message = custNotifMsg
+            )
+
+            showFeedback(custNotifMsg)
+            onCompleted(true, custNotifMsg)
+        }
+    }
+
+    /**
+     * Customer Reschedule Window:
+     * - Reschedule up to 7 days into the future.
+     * - Customer must complete the remaining 50% balance payment to lock the booking.
+     * - Once rescheduled, order is permanently marked non-cancellable!
+     */
+    fun rescheduleOrderByCustomer(
+        orderId: String,
+        newDeliveryDate: String,
+        newDeliveryTimeSlot: String,
+        onCompleted: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val order = repository.getOrderById(orderId)
+            if (order == null) {
+                showFeedback("Order not found")
+                onCompleted(false, "Order not found")
+                return@launch
+            }
+
+            val updatedOrder = order.copy(
+                deliveryDate = newDeliveryDate,
+                deliveryTimeSlot = newDeliveryTimeSlot,
+                advancePaidAmount = order.totalAmount, // 100% full payment completed
+                balanceAmount = 0.0,
+                paymentStatus = PaymentStatus.FULL_PAID,
+                isRescheduled = true,
+                isNonCancellable = true
+            )
+
+            repository.updateOrder(updatedOrder)
+
+            NotificationHelper.showSystemNotification(
+                context = getApplication(),
+                title = "Order Rescheduled Successfully! 🗓️",
+                message = "Order #${order.orderId} rescheduled to $newDeliveryDate ($newDeliveryTimeSlot) with 100% Full Payment locked."
+            )
+
+            val successMsg = "✅ Order #${order.orderId} rescheduled to $newDeliveryDate ($newDeliveryTimeSlot)! Full payment locked."
+            showFeedback(successMsg)
+            onCompleted(true, successMsg)
+        }
+    }
+
+    fun assignDeliveryBoy(
+        orderId: String,
+        boy: DeliveryBoyEntity,
+        bartanDescription: String? = null,
+        handiCount: Int = 0,
+        spoonsCount: Int = 0,
+        boxesCount: Int = 0
+    ) {
+        viewModelScope.launch {
+            repository.assignDeliveryBoy(
+                orderId = orderId,
+                boy = boy,
+                bartanDescription = bartanDescription,
+                handiCount = handiCount,
+                spoonsCount = spoonsCount,
+                boxesCount = boxesCount,
+                context = getApplication()
+            )
+            val containerMsg = if (!bartanDescription.isNullOrBlank()) " with containers: $bartanDescription" else ""
+            showFeedback("Assigned ${boy.name} to Order #$orderId$containerMsg")
+        }
+    }
+
+    /**
+     * Smart Multi-Order Assignment:
+     * Kitchen can assign any number of selected orders (1, 2, 5, 10+) to a single delivery partner at once.
+     * All assigned orders are automatically moved to OUT_FOR_DELIVERY status with live notification.
+     */
+    fun assignMultipleOrdersToDeliveryBoy(orderIds: List<String>, boy: DeliveryBoyEntity, onCompleted: (() -> Unit)? = null) {
+        viewModelScope.launch {
+            orderIds.forEach { id ->
+                repository.assignDeliveryBoy(id, boy, getApplication())
+                repository.updateOrderStatus(id, OrderStatus.OUT_FOR_DELIVERY, getApplication())
+            }
+            showFeedback("🚀 ${orderIds.size} Orders assigned to ${boy.name} & Dispatched!")
+            onCompleted?.invoke()
         }
     }
 
@@ -647,6 +1089,38 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
                     showFeedback("All containers have been returned! No pending 9:30 AM returns.")
                 }
             }
+        }
+    }
+
+    fun saveOrUpdateUtensil(utensil: KitchenUtensilEntity) {
+        viewModelScope.launch {
+            repository.saveUtensil(utensil)
+            showFeedback("Utensil '${utensil.name}' updated! Total Stock: ${utensil.totalStock}")
+        }
+    }
+
+    fun deleteUtensil(id: String) {
+        viewModelScope.launch {
+            repository.deleteUtensil(id)
+            showFeedback("Utensil removed from inventory")
+        }
+    }
+
+    fun reassignBartanPickupBoy(
+        recordId: String,
+        newBoy: DeliveryBoyEntity,
+        customerName: String = "",
+        handiCount: Int = 0
+    ) {
+        viewModelScope.launch {
+            repository.reassignBartanPickupBoy(
+                recordId = recordId,
+                newBoyId = newBoy.id,
+                newBoyName = newBoy.name,
+                newBoyMobile = newBoy.mobile,
+                context = getApplication()
+            )
+            showFeedback("🔄 Pickup assigned to ${newBoy.name}! Notification sent.")
         }
     }
 

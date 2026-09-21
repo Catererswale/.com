@@ -4,6 +4,10 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import android.app.DatePickerDialog
+import java.util.Calendar
+import java.util.Locale
+import com.example.util.TimeSlotUtils
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -37,6 +41,8 @@ import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Check
@@ -87,6 +93,10 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -95,6 +105,7 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -108,6 +119,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.models.OrderEntity
@@ -119,6 +131,548 @@ import com.example.ui.theme.SaffronPrimary
 import com.example.ui.theme.VegGreen
 import kotlinx.coroutines.launch
 
+private fun matchesOrderDate(
+    orderDate: String,
+    filterMode: String, // "ALL", "TODAY", "TOMORROW", "CUSTOM"
+    customDateYmd: String
+): Boolean {
+    if (filterMode == "ALL") return true
+    val trimmed = orderDate.trim()
+    if (trimmed.isEmpty()) return false
+
+    val todayCal = TimeSlotUtils.getIndianCalendar()
+    val tomorrowCal = TimeSlotUtils.getIndianCalendar().apply { add(Calendar.DAY_OF_YEAR, 1) }
+
+    val targetCal = when (filterMode) {
+        "TODAY" -> todayCal
+        "TOMORROW" -> tomorrowCal
+        "CUSTOM" -> {
+            try {
+                val cal = TimeSlotUtils.getIndianCalendar()
+                val parsed = TimeSlotUtils.createDateFormat("yyyy-MM-dd").parse(customDateYmd)
+                if (parsed != null) {
+                    cal.time = parsed
+                    cal
+                } else null
+            } catch (e: Exception) {
+                null
+            }
+        }
+        else -> null
+    } ?: return true
+
+    val ymd = TimeSlotUtils.createDateFormat("yyyy-MM-dd").format(targetCal.time)
+    val dMmmYyyy = TimeSlotUtils.createDateFormat("d MMM yyyy").format(targetCal.time)
+    val ddMmmYyyy = TimeSlotUtils.createDateFormat("dd MMM yyyy").format(targetCal.time)
+    val dMmm = TimeSlotUtils.createDateFormat("d MMM").format(targetCal.time)
+    val ddMmm = TimeSlotUtils.createDateFormat("dd MMM").format(targetCal.time)
+
+    if (filterMode == "TODAY" && TimeSlotUtils.isToday(trimmed)) return true
+
+    return trimmed.contains(ymd, ignoreCase = true) ||
+           trimmed.contains(dMmmYyyy, ignoreCase = true) ||
+           trimmed.contains(ddMmmYyyy, ignoreCase = true) ||
+           trimmed.contains(dMmm, ignoreCase = true) ||
+           trimmed.contains(ddMmm, ignoreCase = true)
+}
+
+private fun matchesOrderTimeSlot(
+    orderTimeSlot: String,
+    filterSlot: String // "ALL", "MORNING_SHIFT", "EVENING_SHIFT", "LUNCH", "SNACKS", "DINNER"
+): Boolean {
+    if (filterSlot == "ALL") return true
+    val lower = orderTimeSlot.lowercase(Locale.ENGLISH)
+    return when (filterSlot) {
+        "MORNING_SHIFT" -> TimeSlotUtils.isMorningShift(orderTimeSlot)
+        "EVENING_SHIFT" -> TimeSlotUtils.isEveningShift(orderTimeSlot)
+        "LUNCH" -> lower.contains("lunch") || lower.contains("11:00") || lower.contains("12:00") || lower.contains("01:00") || lower.contains("02:00 pm")
+        "SNACKS" -> lower.contains("snack") || lower.contains("tea") || lower.contains("02:00 pm") || lower.contains("03:00") || lower.contains("04:00") || lower.contains("05:00")
+        "DINNER" -> lower.contains("dinner") || lower.contains("07:00") || lower.contains("08:00") || lower.contains("09:00") || lower.contains("10:00")
+        else -> lower.contains(filterSlot.lowercase(Locale.ENGLISH))
+    }
+}
+
+/**
+ * Modern Date & Time Slot Filters for Kitchen Panel
+ */
+@Composable
+private fun KitchenDateTimeFilterBar(
+    selectedDateFilterMode: String,
+    onSelectDateFilterMode: (String) -> Unit,
+    selectedTimeSlotFilter: String,
+    onSelectTimeSlotFilter: (String) -> Unit,
+    todayOrdersCount: Int,
+    tomorrowOrdersCount: Int,
+    totalOrdersCount: Int,
+    customSelectedDateDisplay: String,
+    onOpenDatePicker: () -> Unit,
+    dateFilteredOrdersCount: Int,
+    morningOrdersCount: Int = 0,
+    eveningOrdersCount: Int = 0,
+    isCollapsible: Boolean = true,
+    initiallyExpanded: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    var isExpanded by remember { mutableStateOf(initiallyExpanded) }
+
+    Surface(
+        color = Color.White,
+        modifier = modifier.fillMaxWidth(),
+        border = BorderStroke(1.dp, Color(0xFFF1F5F9))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 5.dp)
+        ) {
+            if (isCollapsible && !isExpanded) {
+                // Sleek, compact single-row strip (~38dp) - Maximizes screen space!
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Morning Shift Pill
+                    item {
+                        val isMorningSelected = selectedTimeSlotFilter == "MORNING_SHIFT"
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (isMorningSelected) SaffronPrimary else Color(0xFFFFFBEB),
+                            border = BorderStroke(1.dp, if (isMorningSelected) SaffronPrimary else Color(0xFFFDE68A)),
+                            modifier = Modifier.clickable {
+                                onSelectTimeSlotFilter(if (isMorningSelected) "ALL" else "MORNING_SHIFT")
+                            }
+                        ) {
+                            Text(
+                                "☀️ 6am-3pm ($morningOrdersCount)",
+                                fontSize = 11.sp,
+                                fontWeight = if (isMorningSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isMorningSelected) Color.White else Color(0xFF92400E),
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                            )
+                        }
+                    }
+
+                    // Evening Shift Pill
+                    item {
+                        val isEveningSelected = selectedTimeSlotFilter == "EVENING_SHIFT"
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (isEveningSelected) Color(0xFF6D28D9) else Color(0xFFF5F3FF),
+                            border = BorderStroke(1.dp, if (isEveningSelected) Color(0xFF6D28D9) else Color(0xFFDDD6FE)),
+                            modifier = Modifier.clickable {
+                                onSelectTimeSlotFilter(if (isEveningSelected) "ALL" else "EVENING_SHIFT")
+                            }
+                        ) {
+                            Text(
+                                "🌙 3:30pm-12am ($eveningOrdersCount)",
+                                fontSize = 11.sp,
+                                fontWeight = if (isEveningSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isEveningSelected) Color.White else Color(0xFF5B21B6),
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                            )
+                        }
+                    }
+
+                    // Date Quick Pill
+                    item {
+                        val isDateFiltered = selectedDateFilterMode != "ALL"
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (isDateFiltered) Color(0xFF0F172A) else Color(0xFFF8FAFC),
+                            border = BorderStroke(1.dp, if (isDateFiltered) Color(0xFF0F172A) else Color(0xFFCBD5E1)),
+                            modifier = Modifier.clickable { onOpenDatePicker() }
+                        ) {
+                            Text(
+                                when (selectedDateFilterMode) {
+                                    "TODAY" -> "📅 Today ($todayOrdersCount) ▾"
+                                    "TOMORROW" -> "📅 Tomorrow ($tomorrowOrdersCount) ▾"
+                                    "CUSTOM" -> "📅 $customSelectedDateDisplay ▾"
+                                    else -> "📅 All Dates ($totalOrdersCount) ▾"
+                                },
+                                fontSize = 11.sp,
+                                fontWeight = if (isDateFiltered) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isDateFiltered) Color.White else Color(0xFF1E293B),
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                            )
+                        }
+                    }
+
+                    // Expand Filters Button
+                    item {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = Color(0xFFF1F5F9),
+                            border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
+                            modifier = Modifier.clickable { isExpanded = true }
+                        ) {
+                            Text(
+                                "⚙️ फ़िल्टर ▾",
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF334155),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                            )
+                        }
+                    }
+
+                    // Reset Filters Button
+                    if (selectedDateFilterMode != "ALL" || selectedTimeSlotFilter != "ALL") {
+                        item {
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = Color(0xFFFEE2E2),
+                                border = BorderStroke(1.dp, Color(0xFFFCA5A5)),
+                                modifier = Modifier.clickable {
+                                    onSelectDateFilterMode("ALL")
+                                    onSelectTimeSlotFilter("ALL")
+                                }
+                            ) {
+                                Text(
+                                    "✕ Reset",
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFDC2626),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Row 1: Date Filter Row (Expanded)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Today,
+                            contentDescription = null,
+                            tint = SaffronPrimary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            "Order Date & Shift Filters:",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1E293B)
+                        )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (selectedDateFilterMode != "ALL" || selectedTimeSlotFilter != "ALL") {
+                            Surface(
+                                color = Color(0xFFFEE2E2),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.clickable {
+                                    onSelectDateFilterMode("ALL")
+                                    onSelectTimeSlotFilter("ALL")
+                                }
+                            ) {
+                                Text(
+                                    "Clear Filters ✕",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFDC2626),
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                )
+                            }
+                        }
+
+                        if (isCollapsible) {
+                            Surface(
+                                color = Color(0xFFEFF6FF),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier.clickable { isExpanded = false }
+                            ) {
+                                Text(
+                                    "▲ छिपाएं (Collapse)",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF2563EB),
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+            Spacer(modifier = Modifier.height(5.dp))
+
+            // Date Quick Filter Chips (Today, Tomorrow, Pick Date, All Dates)
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Today Chip
+                item {
+                    val isSelected = selectedDateFilterMode == "TODAY"
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (isSelected) SaffronPrimary else Color(0xFFF8FAFC),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isSelected) SaffronPrimary else Color(0xFFCBD5E1)
+                        ),
+                        modifier = Modifier.clickable { onSelectDateFilterMode("TODAY") }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "⚡ Today ($todayOrdersCount)",
+                                fontSize = 11.5.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSelected) Color.White else Color(0xFF1E293B)
+                            )
+                        }
+                    }
+                }
+
+                // Tomorrow Chip
+                item {
+                    val isSelected = selectedDateFilterMode == "TOMORROW"
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (isSelected) SaffronPrimary else Color(0xFFF8FAFC),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isSelected) SaffronPrimary else Color(0xFFCBD5E1)
+                        ),
+                        modifier = Modifier.clickable { onSelectDateFilterMode("TOMORROW") }
+                    ) {
+                        Text(
+                            "Tomorrow ($tomorrowOrdersCount)",
+                            fontSize = 11.5.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) Color.White else Color(0xFF1E293B),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+
+                // Pick Custom Date Chip
+                item {
+                    val isSelected = selectedDateFilterMode == "CUSTOM"
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (isSelected) SaffronPrimary else Color(0xFFF8FAFC),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isSelected) SaffronPrimary else Color(0xFFCBD5E1)
+                        ),
+                        modifier = Modifier.clickable { onOpenDatePicker() }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.CalendarMonth,
+                                contentDescription = null,
+                                tint = if (isSelected) Color.White else Color(0xFF475569),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                if (isSelected) customSelectedDateDisplay else "Pick Date 📆",
+                                fontSize = 11.5.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSelected) Color.White else Color(0xFF1E293B)
+                            )
+                        }
+                    }
+                }
+
+                // All Dates Chip
+                item {
+                    val isSelected = selectedDateFilterMode == "ALL"
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (isSelected) SaffronPrimary else Color(0xFFF8FAFC),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isSelected) SaffronPrimary else Color(0xFFCBD5E1)
+                        ),
+                        modifier = Modifier.clickable { onSelectDateFilterMode("ALL") }
+                    ) {
+                        Text(
+                            "All Dates ($totalOrdersCount)",
+                            fontSize = 11.5.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) Color.White else Color(0xFF1E293B),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(7.dp))
+
+            // Row 2: Time Slots
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Schedule,
+                    contentDescription = null,
+                    tint = AmberSecondary,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(5.dp))
+                Text(
+                    "Kitchen Prep Shifts (तैयारी शिफ्ट्स):",
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1E293B)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(5.dp))
+
+            // Two Quick Prep Shift Toggle Cards (Morning 6 AM - 3 PM & Evening 3:30 PM - 12 AM)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val isMorningSelected = selectedTimeSlotFilter == "MORNING_SHIFT"
+                val isEveningSelected = selectedTimeSlotFilter == "EVENING_SHIFT"
+
+                // Morning Shift Card: 6 AM to 3 PM
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable {
+                            onSelectTimeSlotFilter(if (isMorningSelected) "ALL" else "MORNING_SHIFT")
+                        },
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (isMorningSelected) SaffronPrimary else Color(0xFFFFFBEB),
+                    border = BorderStroke(1.dp, if (isMorningSelected) SaffronPrimary else Color(0xFFFDE68A))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text(
+                                "☀️ Morning Shift",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isMorningSelected) Color.White else Color(0xFF92400E)
+                            )
+                            Text(
+                                "6 AM – 3 PM",
+                                fontSize = 10.sp,
+                                color = if (isMorningSelected) Color.White.copy(alpha = 0.9f) else Color(0xFFB45309)
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isMorningSelected) Color.White.copy(alpha = 0.25f) else Color(0xFFFEF3C7)
+                        ) {
+                            Text(
+                                "$morningOrdersCount",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isMorningSelected) Color.White else Color(0xFF92400E),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Evening Shift Card: 3:30 PM to 12 AM
+                Surface(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable {
+                            onSelectTimeSlotFilter(if (isEveningSelected) "ALL" else "EVENING_SHIFT")
+                        },
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (isEveningSelected) Color(0xFF6D28D9) else Color(0xFFF5F3FF),
+                    border = BorderStroke(1.dp, if (isEveningSelected) Color(0xFF6D28D9) else Color(0xFFDDD6FE))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text(
+                                "🌙 Evening Shift",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isEveningSelected) Color.White else Color(0xFF5B21B6)
+                            )
+                            Text(
+                                "3:30 PM – 12 AM",
+                                fontSize = 10.sp,
+                                color = if (isEveningSelected) Color.White.copy(alpha = 0.9f) else Color(0xFF6D28D9)
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isEveningSelected) Color.White.copy(alpha = 0.25f) else Color(0xFFEDE9FE)
+                        ) {
+                            Text(
+                                "$eveningOrdersCount",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isEveningSelected) Color.White else Color(0xFF5B21B6),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                val slots = listOf(
+                    "ALL" to "⏰ All Slots ($dateFilteredOrdersCount)",
+                    "MORNING_SHIFT" to "☀️ 6 AM - 3 PM ($morningOrdersCount)",
+                    "EVENING_SHIFT" to "🌙 3:30 PM - 12 AM ($eveningOrdersCount)",
+                    "LUNCH" to "☀️ Lunch (11 AM - 2 PM)",
+                    "SNACKS" to "☕ Snacks (2 PM - 5 PM)",
+                    "DINNER" to "🌙 Dinner (7 PM - 10:30 PM)"
+                )
+
+                items(slots) { (slotKey, slotLabel) ->
+                    val isSelected = selectedTimeSlotFilter == slotKey
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isSelected) Color(0xFF0F172A) else Color(0xFFF1F5F9),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isSelected) Color(0xFF0F172A) else Color(0xFFE2E8F0)
+                        ),
+                        modifier = Modifier.clickable { onSelectTimeSlotFilter(slotKey) }
+                    ) {
+                        Text(
+                            slotLabel,
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) Color.White else Color(0xFF475569),
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+}
+
 /**
  * Modern Responsive Kitchen Dashboard matching Image 2: "KITCHEN PANEL - A1 Huma Caterers"
  * Automatically adapts between Mobile (handheld) and Tablet / Foldable (split-pane & kanban).
@@ -128,6 +682,8 @@ fun KitchenResponsiveDashboard(
     viewModel: CaterersViewModel,
     onNavigateTab: (Int) -> Unit = {},
     onPreviewCustomerStore: (String) -> Unit = {},
+    isBigScreenMode: Boolean = false,
+    onToggleBigScreenMode: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -143,7 +699,9 @@ fun KitchenResponsiveDashboard(
             KitchenMobileLayout(
                 viewModel = viewModel,
                 onNavigateTab = onNavigateTab,
-                onPreviewCustomerStore = onPreviewCustomerStore
+                onPreviewCustomerStore = onPreviewCustomerStore,
+                isBigScreenMode = isBigScreenMode,
+                onToggleBigScreenMode = onToggleBigScreenMode
             )
         }
     }
@@ -165,11 +723,51 @@ private fun KitchenTabletLayout(
     val selectedKitchenId by viewModel.selectedCatererId.collectAsState()
     val activeKitchenId = selectedKitchenId ?: "caterer_1"
 
+    val todayCal = remember { TimeSlotUtils.getIndianCalendar() }
+    val todayYmd = remember { TimeSlotUtils.createDateFormat("yyyy-MM-dd").format(todayCal.time) }
+    val todayDisplay = remember { TimeSlotUtils.createDateFormat("d MMM").format(todayCal.time) }
+    val todayDisplayFull = remember { TimeSlotUtils.createDateFormat("dd MMM yyyy").format(todayCal.time) }
+
+    var selectedDateFilterMode by remember { mutableStateOf("ALL") }
+    var customSelectedDateYmd by remember { mutableStateOf(todayYmd) }
+    var customSelectedDateDisplay by remember { mutableStateOf(todayDisplayFull) }
+    var selectedTimeSlotFilter by remember { mutableStateOf("ALL") }
+
+    val dateFilteredOrders = remember(orders, selectedDateFilterMode, customSelectedDateYmd) {
+        orders.filter { matchesOrderDate(it.deliveryDate, selectedDateFilterMode, customSelectedDateYmd) }
+    }
+    val dateAndTimeFilteredOrders = remember(dateFilteredOrders, selectedTimeSlotFilter) {
+        dateFilteredOrders.filter { matchesOrderTimeSlot(it.deliveryTimeSlot, selectedTimeSlotFilter) }
+    }
+
+    val morningOrdersCount = remember(dateFilteredOrders) {
+        dateFilteredOrders.count { TimeSlotUtils.isMorningShift(it.deliveryTimeSlot) }
+    }
+    val eveningOrdersCount = remember(dateFilteredOrders) {
+        dateFilteredOrders.count { TimeSlotUtils.isEveningShift(it.deliveryTimeSlot) }
+    }
+
+    val todayOrdersCount = remember(orders) {
+        orders.count { matchesOrderDate(it.deliveryDate, "TODAY", "") }
+    }
+    val tomorrowOrdersCount = remember(orders) {
+        orders.count { matchesOrderDate(it.deliveryDate, "TOMORROW", "") }
+    }
+
+    val currentActiveDateLabel = when (selectedDateFilterMode) {
+        "TODAY" -> "Today, $todayDisplay"
+        "TOMORROW" -> {
+            val tomCal = TimeSlotUtils.getIndianCalendar().apply { add(Calendar.DAY_OF_YEAR, 1) }
+            "Tomorrow, " + TimeSlotUtils.createDateFormat("d MMM").format(tomCal.time)
+        }
+        "CUSTOM" -> customSelectedDateDisplay
+        else -> "All Orders ($todayDisplayFull)"
+    }
+
     var selectedPipelineStage by remember { mutableStateOf("ALL") }
     var dashboardViewMode by remember { mutableStateOf("ORDERS_PIPELINE") } // "ORDERS_PIPELINE" or "DELIVERY_PARTNERS"
     var selectedOrderForDetail by remember { mutableStateOf<OrderEntity?>(orders.firstOrNull()) }
     var showAssignDeliveryModal by remember { mutableStateOf<OrderEntity?>(null) }
-    var currentDateStr by remember { mutableStateOf("12 May 2024") }
 
     Row(modifier = Modifier.fillMaxSize()) {
         // 1. Left Sidebar Navigation
@@ -216,13 +814,13 @@ private fun KitchenTabletLayout(
                 Spacer(modifier = Modifier.height(10.dp))
                 Text("PREPARATION MANAGEMENT", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF64748B), modifier = Modifier.padding(start = 8.dp, bottom = 4.dp))
 
-                SidebarSubNavItem("All Orders", orders.size, selectedPipelineStage == "ALL" && dashboardViewMode == "ORDERS_PIPELINE") { selectedPipelineStage = "ALL"; dashboardViewMode = "ORDERS_PIPELINE" }
-                SidebarSubNavItem("Confirm Orders", orders.count { it.orderStatus == OrderStatus.CONFIRMED || it.orderStatus == OrderStatus.ACCEPTED }, selectedPipelineStage == "CONFIRM" && dashboardViewMode == "ORDERS_PIPELINE") { selectedPipelineStage = "CONFIRM"; dashboardViewMode = "ORDERS_PIPELINE" }
-                SidebarSubNavItem("In Preparation", orders.count { it.orderStatus == OrderStatus.PREPARING }, selectedPipelineStage == "PREPARING" && dashboardViewMode == "ORDERS_PIPELINE") { selectedPipelineStage = "PREPARING"; dashboardViewMode = "ORDERS_PIPELINE" }
-                SidebarSubNavItem("Ready Orders", orders.count { it.orderStatus == OrderStatus.READY }, selectedPipelineStage == "READY" && dashboardViewMode == "ORDERS_PIPELINE") { selectedPipelineStage = "READY"; dashboardViewMode = "ORDERS_PIPELINE" }
-                SidebarSubNavItem("Out for Delivery", orders.count { it.orderStatus == OrderStatus.OUT_FOR_DELIVERY || it.orderStatus == OrderStatus.ASSIGNED_DELIVERY }, selectedPipelineStage == "OUT_FOR_DELIVERY" && dashboardViewMode == "ORDERS_PIPELINE") { selectedPipelineStage = "OUT_FOR_DELIVERY"; dashboardViewMode = "ORDERS_PIPELINE" }
-                SidebarSubNavItem("Delivered Orders", orders.count { it.orderStatus == OrderStatus.DELIVERED }, selectedPipelineStage == "DELIVERED" && dashboardViewMode == "ORDERS_PIPELINE") { selectedPipelineStage = "DELIVERED"; dashboardViewMode = "ORDERS_PIPELINE" }
-                SidebarSubNavItem("Cancelled Orders", orders.count { it.orderStatus == OrderStatus.CANCELLED }, selectedPipelineStage == "CANCELLED" && dashboardViewMode == "ORDERS_PIPELINE") { selectedPipelineStage = "CANCELLED"; dashboardViewMode = "ORDERS_PIPELINE" }
+                SidebarSubNavItem("All Orders", dateAndTimeFilteredOrders.size, selectedPipelineStage == "ALL" && dashboardViewMode == "ORDERS_PIPELINE") { selectedPipelineStage = "ALL"; dashboardViewMode = "ORDERS_PIPELINE" }
+                SidebarSubNavItem("Confirm Orders", dateAndTimeFilteredOrders.count { it.orderStatus == OrderStatus.CONFIRMED || it.orderStatus == OrderStatus.ACCEPTED }, selectedPipelineStage == "CONFIRM" && dashboardViewMode == "ORDERS_PIPELINE") { selectedPipelineStage = "CONFIRM"; dashboardViewMode = "ORDERS_PIPELINE" }
+                SidebarSubNavItem("In Preparation", dateAndTimeFilteredOrders.count { it.orderStatus == OrderStatus.PREPARING }, selectedPipelineStage == "PREPARING" && dashboardViewMode == "ORDERS_PIPELINE") { selectedPipelineStage = "PREPARING"; dashboardViewMode = "ORDERS_PIPELINE" }
+                SidebarSubNavItem("Ready Orders", dateAndTimeFilteredOrders.count { it.orderStatus == OrderStatus.READY }, selectedPipelineStage == "READY" && dashboardViewMode == "ORDERS_PIPELINE") { selectedPipelineStage = "READY"; dashboardViewMode = "ORDERS_PIPELINE" }
+                SidebarSubNavItem("Out for Delivery", dateAndTimeFilteredOrders.count { it.orderStatus == OrderStatus.OUT_FOR_DELIVERY || it.orderStatus == OrderStatus.ASSIGNED_DELIVERY }, selectedPipelineStage == "OUT_FOR_DELIVERY" && dashboardViewMode == "ORDERS_PIPELINE") { selectedPipelineStage = "OUT_FOR_DELIVERY"; dashboardViewMode = "ORDERS_PIPELINE" }
+                SidebarSubNavItem("Delivered Orders", dateAndTimeFilteredOrders.count { it.orderStatus == OrderStatus.DELIVERED }, selectedPipelineStage == "DELIVERED" && dashboardViewMode == "ORDERS_PIPELINE") { selectedPipelineStage = "DELIVERED"; dashboardViewMode = "ORDERS_PIPELINE" }
+                SidebarSubNavItem("Cancelled Orders", dateAndTimeFilteredOrders.count { it.orderStatus == OrderStatus.CANCELLED }, selectedPipelineStage == "CANCELLED" && dashboardViewMode == "ORDERS_PIPELINE") { selectedPipelineStage = "CANCELLED"; dashboardViewMode = "ORDERS_PIPELINE" }
 
                 Spacer(modifier = Modifier.height(12.dp))
                 HorizontalDivider(color = Color(0xFF1E293B))
@@ -268,9 +866,27 @@ private fun KitchenTabletLayout(
             // Top Bar
             KitchenTopHeader(
                 kitchenName = "A1 Huma Caterers",
-                currentDateStr = currentDateStr,
+                currentDateStr = currentActiveDateLabel,
                 onRefresh = {
                     Toast.makeText(context, "Pipeline refreshed with live orders!", Toast.LENGTH_SHORT).show()
+                },
+                onDateClick = {
+                    DatePickerDialog(
+                        context,
+                        { _, year, month, dayOfMonth ->
+                            val cal = TimeSlotUtils.getIndianCalendar().apply {
+                                set(Calendar.YEAR, year)
+                                set(Calendar.MONTH, month)
+                                set(Calendar.DAY_OF_MONTH, dayOfMonth)
+                            }
+                            customSelectedDateYmd = TimeSlotUtils.createDateFormat("yyyy-MM-dd").format(cal.time)
+                            customSelectedDateDisplay = TimeSlotUtils.createDateFormat("dd MMM yyyy").format(cal.time)
+                            selectedDateFilterMode = "CUSTOM"
+                        },
+                        todayCal.get(Calendar.YEAR),
+                        todayCal.get(Calendar.MONTH),
+                        todayCal.get(Calendar.DAY_OF_MONTH)
+                    ).show()
                 }
             )
 
@@ -306,7 +922,7 @@ private fun KitchenTabletLayout(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                "Orders Pipeline (${orders.size})",
+                                "Orders Pipeline (${dateAndTimeFilteredOrders.size})",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (dashboardViewMode == "ORDERS_PIPELINE") Color.White else Color(0xFF475569)
@@ -367,8 +983,41 @@ private fun KitchenTabletLayout(
                         .fillMaxWidth()
                 )
             } else {
+                // Kitchen Date & Time Filter Bar
+                KitchenDateTimeFilterBar(
+                    selectedDateFilterMode = selectedDateFilterMode,
+                    onSelectDateFilterMode = { selectedDateFilterMode = it },
+                    selectedTimeSlotFilter = selectedTimeSlotFilter,
+                    onSelectTimeSlotFilter = { selectedTimeSlotFilter = it },
+                    todayOrdersCount = todayOrdersCount,
+                    tomorrowOrdersCount = tomorrowOrdersCount,
+                    totalOrdersCount = orders.size,
+                    customSelectedDateDisplay = customSelectedDateDisplay,
+                    onOpenDatePicker = {
+                        DatePickerDialog(
+                            context,
+                            { _, year, month, dayOfMonth ->
+                                val cal = TimeSlotUtils.getIndianCalendar().apply {
+                                    set(Calendar.YEAR, year)
+                                    set(Calendar.MONTH, month)
+                                    set(Calendar.DAY_OF_MONTH, dayOfMonth)
+                                }
+                                customSelectedDateYmd = TimeSlotUtils.createDateFormat("yyyy-MM-dd").format(cal.time)
+                                customSelectedDateDisplay = TimeSlotUtils.createDateFormat("dd MMM yyyy").format(cal.time)
+                                selectedDateFilterMode = "CUSTOM"
+                            },
+                            todayCal.get(Calendar.YEAR),
+                            todayCal.get(Calendar.MONTH),
+                            todayCal.get(Calendar.DAY_OF_MONTH)
+                        ).show()
+                    },
+                    dateFilteredOrdersCount = dateFilteredOrders.size,
+                    morningOrdersCount = morningOrdersCount,
+                    eveningOrdersCount = eveningOrdersCount
+                )
+
                 // Pipeline Metric Status Cards Strip (From Image 2)
-                KitchenPipelineMetricStrip(orders = orders)
+                KitchenPipelineMetricStrip(orders = dateAndTimeFilteredOrders)
 
                 // Master-Detail Split: Left Kanban Pipeline + Right Order Inspector
                 Row(
@@ -384,13 +1033,17 @@ private fun KitchenTabletLayout(
                             .padding(horizontal = 12.dp, vertical = 8.dp)
                     ) {
                         KitchenKanbanBoard(
-                            orders = orders,
+                            orders = dateAndTimeFilteredOrders,
                             selectedStage = selectedPipelineStage,
                             onSelectOrder = { selectedOrderForDetail = it },
                             onAction = { action, order ->
                                 handleOrderAction(viewModel, action, order, context) {
                                     showAssignDeliveryModal = it
                                 }
+                            },
+                            onResetFilters = {
+                                selectedDateFilterMode = "ALL"
+                                selectedTimeSlotFilter = "ALL"
                             }
                         )
                     }
@@ -430,15 +1083,22 @@ private fun KitchenTabletLayout(
         }
     }
 
-    // Delivery Assignment Dialog
+    // Delivery Assignment Dialog with Bartan Flow
     if (showAssignDeliveryModal != null) {
         AssignDeliveryBoyDialog(
             order = showAssignDeliveryModal!!,
             deliveryBoys = deliveryBoys,
             onDismiss = { showAssignDeliveryModal = null },
-            onAssign = { boy ->
-                viewModel.assignDeliveryBoy(showAssignDeliveryModal!!.orderId, boy)
-                Toast.makeText(context, "Assigned order to ${boy.name}!", Toast.LENGTH_SHORT).show()
+            onAssign = { boy, bartanDesc, handis, spoons, boxes ->
+                viewModel.assignDeliveryBoy(
+                    orderId = showAssignDeliveryModal!!.orderId,
+                    boy = boy,
+                    bartanDescription = bartanDesc,
+                    handiCount = handis,
+                    spoonsCount = spoons,
+                    boxesCount = boxes
+                )
+                Toast.makeText(context, "Assigned to ${boy.name} with $bartanDesc!", Toast.LENGTH_SHORT).show()
                 showAssignDeliveryModal = null
             }
         )
@@ -452,13 +1112,58 @@ private fun KitchenTabletLayout(
 private fun KitchenMobileLayout(
     viewModel: CaterersViewModel,
     onNavigateTab: (Int) -> Unit,
-    onPreviewCustomerStore: (String) -> Unit
+    onPreviewCustomerStore: (String) -> Unit,
+    isBigScreenMode: Boolean = false,
+    onToggleBigScreenMode: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    var localBigScreenMode by remember { mutableStateOf(false) }
+    val effectiveBigScreen = isBigScreenMode || localBigScreenMode
     val orders by viewModel.ordersList.collectAsState()
     val deliveryBoys by viewModel.deliveryBoysList.collectAsState()
     val selectedKitchenId by viewModel.selectedCatererId.collectAsState()
     val activeKitchenId = selectedKitchenId ?: "caterer_1"
+
+    val todayCal = remember { TimeSlotUtils.getIndianCalendar() }
+    val todayYmd = remember { TimeSlotUtils.createDateFormat("yyyy-MM-dd").format(todayCal.time) }
+    val todayDisplay = remember { TimeSlotUtils.createDateFormat("d MMM").format(todayCal.time) }
+    val todayDisplayFull = remember { TimeSlotUtils.createDateFormat("dd MMM yyyy").format(todayCal.time) }
+
+    var selectedDateFilterMode by remember { mutableStateOf("ALL") }
+    var customSelectedDateYmd by remember { mutableStateOf(todayYmd) }
+    var customSelectedDateDisplay by remember { mutableStateOf(todayDisplayFull) }
+    var selectedTimeSlotFilter by remember { mutableStateOf("ALL") }
+
+    val dateFilteredOrders = remember(orders, selectedDateFilterMode, customSelectedDateYmd) {
+        orders.filter { matchesOrderDate(it.deliveryDate, selectedDateFilterMode, customSelectedDateYmd) }
+    }
+    val dateAndTimeFilteredOrders = remember(dateFilteredOrders, selectedTimeSlotFilter) {
+        dateFilteredOrders.filter { matchesOrderTimeSlot(it.deliveryTimeSlot, selectedTimeSlotFilter) }
+    }
+
+    val morningOrdersCount = remember(dateFilteredOrders) {
+        dateFilteredOrders.count { TimeSlotUtils.isMorningShift(it.deliveryTimeSlot) }
+    }
+    val eveningOrdersCount = remember(dateFilteredOrders) {
+        dateFilteredOrders.count { TimeSlotUtils.isEveningShift(it.deliveryTimeSlot) }
+    }
+
+    val todayOrdersCount = remember(orders) {
+        orders.count { matchesOrderDate(it.deliveryDate, "TODAY", "") }
+    }
+    val tomorrowOrdersCount = remember(orders) {
+        orders.count { matchesOrderDate(it.deliveryDate, "TOMORROW", "") }
+    }
+
+    val currentActiveDateLabel = when (selectedDateFilterMode) {
+        "TODAY" -> "Today, $todayDisplay"
+        "TOMORROW" -> {
+            val tomCal = TimeSlotUtils.getIndianCalendar().apply { add(Calendar.DAY_OF_YEAR, 1) }
+            "Tomorrow, " + TimeSlotUtils.createDateFormat("d MMM").format(tomCal.time)
+        }
+        "CUSTOM" -> customSelectedDateDisplay
+        else -> "All Orders ($todayDisplayFull)"
+    }
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -469,7 +1174,15 @@ private fun KitchenMobileLayout(
     var showAssignDeliveryModal by remember { mutableStateOf<OrderEntity?>(null) }
 
     val stages = listOf("ALL", "CONFIRM", "PREPARING", "READY", "OUT_FOR_DELIVERY", "DELIVERED", "CANCELLED")
-    val stageLabels = listOf("All (128)", "Confirm (52)", "In Prep (18)", "Ready (22)", "Out for Del (14)", "Delivered (20)", "Cancelled (2)")
+    val stageLabels = listOf(
+        "All (${dateAndTimeFilteredOrders.size})",
+        "Confirm (${dateAndTimeFilteredOrders.count { it.orderStatus == OrderStatus.CONFIRMED || it.orderStatus == OrderStatus.ACCEPTED }})",
+        "In Prep (${dateAndTimeFilteredOrders.count { it.orderStatus == OrderStatus.PREPARING }})",
+        "Ready (${dateAndTimeFilteredOrders.count { it.orderStatus == OrderStatus.READY }})",
+        "Out for Del (${dateAndTimeFilteredOrders.count { it.orderStatus == OrderStatus.OUT_FOR_DELIVERY || it.orderStatus == OrderStatus.ASSIGNED_DELIVERY }})",
+        "Delivered (${dateAndTimeFilteredOrders.count { it.orderStatus == OrderStatus.DELIVERED }})",
+        "Cancelled (${dateAndTimeFilteredOrders.count { it.orderStatus == OrderStatus.CANCELLED }})"
+    )
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -580,35 +1293,130 @@ private fun KitchenMobileLayout(
                 .fillMaxSize()
                 .background(Color(0xFFF8FAFC))
         ) {
-            // Mobile Top Bar
-            Surface(color = Color(0xFF0F172A), contentColor = Color.White) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
+            // Mobile Top Bar (Adaptive for Big Screen Mode)
+            if (effectiveBigScreen) {
+                Surface(color = Color(0xFF0F172A), contentColor = Color.White) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                color = AmberSecondary,
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    "⛶ बड़ी स्क्रीन चालू",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Black,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "${dateAndTimeFilteredOrders.size} Orders",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
                         }
-                        Column {
-                            Text("Kitchen Panel", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Text("A1 Huma • Online 🟢", fontSize = 11.sp, color = AmberSecondary)
+
+                        Surface(
+                            color = Color(0xFF334155),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.clickable {
+                                localBigScreenMode = false
+                                onToggleBigScreenMode()
+                            }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("सामान्य दृश्य (Exit) ✕", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
                         }
                     }
-
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            color = Color(0xFF1E293B),
-                            shape = RoundedCornerShape(16.dp),
-                            modifier = Modifier.padding(end = 6.dp)
-                        ) {
-                            Text("12 May 2024", fontSize = 11.sp, color = Color.White, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                }
+            } else {
+                Surface(color = Color(0xFF0F172A), contentColor = Color.White) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
+                            }
+                            Column {
+                                Text("Kitchen Panel", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text("A1 Huma • Online 🟢", fontSize = 11.sp, color = AmberSecondary)
+                            }
                         }
-                        IconButton(onClick = { Toast.makeText(context, "Refreshed!", Toast.LENGTH_SHORT).show() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color.White, modifier = Modifier.size(18.dp))
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Big Screen Mode Toggle Button
+                            Surface(
+                                color = AmberSecondary,
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier
+                                    .padding(end = 6.dp)
+                                    .clickable {
+                                        localBigScreenMode = true
+                                        onToggleBigScreenMode()
+                                    }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("⛶ बड़ी स्क्रीन", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                }
+                            }
+
+                            Surface(
+                                color = Color(0xFF1E293B),
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier
+                                    .padding(end = 4.dp)
+                                    .clickable {
+                                        DatePickerDialog(
+                                            context,
+                                            { _, year, month, dayOfMonth ->
+                                                val cal = TimeSlotUtils.getIndianCalendar().apply {
+                                                    set(Calendar.YEAR, year)
+                                                    set(Calendar.MONTH, month)
+                                                    set(Calendar.DAY_OF_MONTH, dayOfMonth)
+                                                }
+                                                customSelectedDateYmd = TimeSlotUtils.createDateFormat("yyyy-MM-dd").format(cal.time)
+                                                customSelectedDateDisplay = TimeSlotUtils.createDateFormat("dd MMM yyyy").format(cal.time)
+                                                selectedDateFilterMode = "CUSTOM"
+                                            },
+                                            todayCal.get(Calendar.YEAR),
+                                            todayCal.get(Calendar.MONTH),
+                                            todayCal.get(Calendar.DAY_OF_MONTH)
+                                        ).show()
+                                    }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.Today, contentDescription = null, tint = AmberSecondary, modifier = Modifier.size(13.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(currentActiveDateLabel, fontSize = 11.sp, color = Color.White)
+                                }
+                            }
+                            IconButton(onClick = { Toast.makeText(context, "Refreshed live orders!", Toast.LENGTH_SHORT).show() }) {
+                                Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color.White, modifier = Modifier.size(18.dp))
+                            }
                         }
                     }
                 }
@@ -643,7 +1451,7 @@ private fun KitchenMobileLayout(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            "Pipeline (${orders.size})",
+                            "Pipeline (${dateAndTimeFilteredOrders.size})",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (mobileDashboardView == "ORDERS_PIPELINE") Color.White else Color(0xFF475569)
@@ -690,6 +1498,41 @@ private fun KitchenMobileLayout(
                         .fillMaxWidth()
                 )
             } else {
+                // Kitchen Date & Time Filter Bar
+                KitchenDateTimeFilterBar(
+                    selectedDateFilterMode = selectedDateFilterMode,
+                    onSelectDateFilterMode = { selectedDateFilterMode = it },
+                    selectedTimeSlotFilter = selectedTimeSlotFilter,
+                    onSelectTimeSlotFilter = { selectedTimeSlotFilter = it },
+                    todayOrdersCount = todayOrdersCount,
+                    tomorrowOrdersCount = tomorrowOrdersCount,
+                    totalOrdersCount = orders.size,
+                    customSelectedDateDisplay = customSelectedDateDisplay,
+                    onOpenDatePicker = {
+                        DatePickerDialog(
+                            context,
+                            { _, year, month, dayOfMonth ->
+                                val cal = TimeSlotUtils.getIndianCalendar().apply {
+                                    set(Calendar.YEAR, year)
+                                    set(Calendar.MONTH, month)
+                                    set(Calendar.DAY_OF_MONTH, dayOfMonth)
+                                }
+                                customSelectedDateYmd = TimeSlotUtils.createDateFormat("yyyy-MM-dd").format(cal.time)
+                                customSelectedDateDisplay = TimeSlotUtils.createDateFormat("dd MMM yyyy").format(cal.time)
+                                selectedDateFilterMode = "CUSTOM"
+                            },
+                            todayCal.get(Calendar.YEAR),
+                            todayCal.get(Calendar.MONTH),
+                            todayCal.get(Calendar.DAY_OF_MONTH)
+                        ).show()
+                    },
+                    dateFilteredOrdersCount = dateFilteredOrders.size,
+                    morningOrdersCount = morningOrdersCount,
+                    eveningOrdersCount = eveningOrdersCount,
+                    isCollapsible = true,
+                    initiallyExpanded = false
+                )
+
                 // Horizontal Scrollable Stages Tabs
                 LazyRow(
                     modifier = Modifier
@@ -722,73 +1565,79 @@ private fun KitchenMobileLayout(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     KitchenKanbanBoard(
-                        orders = orders,
+                        orders = dateAndTimeFilteredOrders,
                         selectedStage = stages[selectedStageIndex],
                         onSelectOrder = { selectedOrderForDetail = it },
                         onAction = { action, order ->
                             handleOrderAction(viewModel, action, order, context) {
                                 showAssignDeliveryModal = it
                             }
+                        },
+                        onResetFilters = {
+                            selectedDateFilterMode = "ALL"
+                            selectedTimeSlotFilter = "ALL"
                         }
                     )
                 }
             }
 
-            // Mobile Quick Action Strip
-            Surface(
-                color = Color.White,
-                shadowElevation = 6.dp,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            // Mobile Quick Action Strip (hidden in Big Screen Mode to maximize order visibility)
+            if (!effectiveBigScreen) {
+                Surface(
+                    color = Color.White,
+                    shadowElevation = 6.dp,
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.clickable { mobileDashboardView = "ORDERS_PIPELINE"; selectedStageIndex = 0 }
-                    ) {
-                        Icon(Icons.Default.Dashboard, contentDescription = "Pipeline", tint = if (mobileDashboardView == "ORDERS_PIPELINE") SaffronPrimary else Color.Gray, modifier = Modifier.size(20.dp))
-                        Text("Pipeline", fontSize = 10.sp, fontWeight = if (mobileDashboardView == "ORDERS_PIPELINE") FontWeight.Bold else FontWeight.Normal, color = if (mobileDashboardView == "ORDERS_PIPELINE") SaffronPrimary else Color.Gray)
-                    }
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
+                    Row(
                         modifier = Modifier
-                            .clickable { onNavigateTab(KitchenNavTabs.OFFLINE_BOOKING) }
-                            .testTag("bottom_nav_offline_booking")
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Surface(
-                            color = Color(0xFFEFF6FF),
-                            shape = CircleShape,
-                            border = BorderStroke(1.dp, Color(0xFF93C5FD)),
-                            modifier = Modifier.size(28.dp)
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.clickable { mobileDashboardView = "ORDERS_PIPELINE"; selectedStageIndex = 0 }
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.ReceiptLong, contentDescription = "Offline Booking", tint = Color(0xFF0288D1), modifier = Modifier.size(16.dp))
-                            }
+                            Icon(Icons.Default.Dashboard, contentDescription = "Pipeline", tint = if (mobileDashboardView == "ORDERS_PIPELINE") SaffronPrimary else Color.Gray, modifier = Modifier.size(20.dp))
+                            Text("Pipeline", fontSize = 10.sp, fontWeight = if (mobileDashboardView == "ORDERS_PIPELINE") FontWeight.Bold else FontWeight.Normal, color = if (mobileDashboardView == "ORDERS_PIPELINE") SaffronPrimary else Color.Gray)
                         }
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text("Offline Booking", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0288D1))
-                    }
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.clickable { onNavigateTab(KitchenNavTabs.CONTAINERS_CASH) }
-                    ) {
-                        Icon(Icons.Default.SoupKitchen, contentDescription = null, tint = AmberSecondary, modifier = Modifier.size(20.dp))
-                        Text("Handi & Cash", fontSize = 10.sp, color = Color(0xFF92400E))
-                    }
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.clickable { onNavigateTab(KitchenNavTabs.ANALYTICS) }
-                    ) {
-                        Icon(Icons.Default.Analytics, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(20.dp))
-                        Text("Analytics", fontSize = 10.sp, color = Color.Gray)
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier
+                                .clickable { onNavigateTab(KitchenNavTabs.OFFLINE_BOOKING) }
+                                .testTag("bottom_nav_offline_booking")
+                        ) {
+                            Surface(
+                                color = Color(0xFFEFF6FF),
+                                shape = CircleShape,
+                                border = BorderStroke(1.dp, Color(0xFF93C5FD)),
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.ReceiptLong, contentDescription = "Offline Booking", tint = Color(0xFF0288D1), modifier = Modifier.size(16.dp))
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text("Offline Booking", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0288D1))
+                        }
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.clickable { onNavigateTab(KitchenNavTabs.CONTAINERS_CASH) }
+                        ) {
+                            Icon(Icons.Default.SoupKitchen, contentDescription = null, tint = AmberSecondary, modifier = Modifier.size(20.dp))
+                            Text("Handi & Cash", fontSize = 10.sp, color = Color(0xFF92400E))
+                        }
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.clickable { onNavigateTab(KitchenNavTabs.ANALYTICS) }
+                        ) {
+                            Icon(Icons.Default.Analytics, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(20.dp))
+                            Text("Analytics", fontSize = 10.sp, color = Color.Gray)
+                        }
                     }
                 }
             }
@@ -820,15 +1669,22 @@ private fun KitchenMobileLayout(
         )
     }
 
-    // Assignment Dialog
+    // Assignment Dialog with Bartan Flow
     if (showAssignDeliveryModal != null) {
         AssignDeliveryBoyDialog(
             order = showAssignDeliveryModal!!,
             deliveryBoys = deliveryBoys,
             onDismiss = { showAssignDeliveryModal = null },
-            onAssign = { boy ->
-                viewModel.assignDeliveryBoy(showAssignDeliveryModal!!.orderId, boy)
-                Toast.makeText(context, "Assigned order to ${boy.name}!", Toast.LENGTH_SHORT).show()
+            onAssign = { boy, bartanDesc, handis, spoons, boxes ->
+                viewModel.assignDeliveryBoy(
+                    orderId = showAssignDeliveryModal!!.orderId,
+                    boy = boy,
+                    bartanDescription = bartanDesc,
+                    handiCount = handis,
+                    spoonsCount = spoons,
+                    boxesCount = boxes
+                )
+                Toast.makeText(context, "Assigned to ${boy.name} with $bartanDesc!", Toast.LENGTH_SHORT).show()
                 showAssignDeliveryModal = null
             }
         )
@@ -842,7 +1698,8 @@ private fun KitchenMobileLayout(
 private fun KitchenTopHeader(
     kitchenName: String,
     currentDateStr: String,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    onDateClick: (() -> Unit)? = null
 ) {
     Surface(
         color = Color(0xFF0F172A),
@@ -865,7 +1722,8 @@ private fun KitchenTopHeader(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Surface(
                     color = Color(0xFF1E293B),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.clickable(enabled = onDateClick != null) { onDateClick?.invoke() }
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -922,20 +1780,26 @@ private fun KitchenTopHeader(
  */
 @Composable
 private fun KitchenPipelineMetricStrip(orders: List<OrderEntity>) {
-    val allCount = 128
-    val allAmt = "₹ 2,34,700"
-    val confirmCount = 52
-    val confirmAmt = "₹ 1,24,500"
-    val prepCount = 18
-    val prepAmt = "₹ 48,300"
-    val readyCount = 22
-    val readyAmt = "₹ 68,700"
-    val outCount = 14
-    val outAmt = "₹ 36,400"
-    val deliveredCount = 20
-    val deliveredAmt = "₹ 52,600"
-    val cancelledCount = 2
-    val cancelledAmt = "₹ 4,200"
+    val allCount = orders.size
+    val allAmt = "₹ " + "%,d".format(orders.sumOf { it.totalAmount }.toLong())
+    val confirmOrders = orders.filter { it.orderStatus == OrderStatus.CONFIRMED || it.orderStatus == OrderStatus.ACCEPTED }
+    val confirmCount = confirmOrders.size
+    val confirmAmt = "₹ " + "%,d".format(confirmOrders.sumOf { it.totalAmount }.toLong())
+    val prepOrders = orders.filter { it.orderStatus == OrderStatus.PREPARING }
+    val prepCount = prepOrders.size
+    val prepAmt = "₹ " + "%,d".format(prepOrders.sumOf { it.totalAmount }.toLong())
+    val readyOrders = orders.filter { it.orderStatus == OrderStatus.READY }
+    val readyCount = readyOrders.size
+    val readyAmt = "₹ " + "%,d".format(readyOrders.sumOf { it.totalAmount }.toLong())
+    val outOrders = orders.filter { it.orderStatus == OrderStatus.OUT_FOR_DELIVERY || it.orderStatus == OrderStatus.ASSIGNED_DELIVERY }
+    val outCount = outOrders.size
+    val outAmt = "₹ " + "%,d".format(outOrders.sumOf { it.totalAmount }.toLong())
+    val deliveredOrders = orders.filter { it.orderStatus == OrderStatus.DELIVERED }
+    val deliveredCount = deliveredOrders.size
+    val deliveredAmt = "₹ " + "%,d".format(deliveredOrders.sumOf { it.totalAmount }.toLong())
+    val cancelledOrders = orders.filter { it.orderStatus == OrderStatus.CANCELLED }
+    val cancelledCount = cancelledOrders.size
+    val cancelledAmt = "₹ " + "%,d".format(cancelledOrders.sumOf { it.totalAmount }.toLong())
 
     LazyRow(
         modifier = Modifier
@@ -1045,16 +1909,74 @@ private fun PipelineMetricTile(
 }
 
 /**
- * Multi-Column Kanban Board displaying cards per status stage
+ * Shift Header Section for grouping orders by Morning Shift (6 AM - 3 PM)
+ * and Evening Shift (3:30 PM - 12 AM)
+ */
+@Composable
+private fun KitchenShiftHeaderSection(
+    title: String,
+    timeRange: String,
+    ordersCount: Int,
+    containerColor: Color,
+    contentColor: Color,
+    accentColor: Color
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = containerColor,
+        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.4f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 9.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = title,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    color = contentColor
+                )
+                Text(
+                    text = "$timeRange • Earlier orders on top ⬆️",
+                    fontSize = 10.5.sp,
+                    color = contentColor.copy(alpha = 0.85f)
+                )
+            }
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = accentColor
+            ) {
+                Text(
+                    text = "$ordersCount Orders",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Multi-Column Kanban Board displaying cards per status stage with
+ * Morning Shift (6 AM - 3 PM) and Evening Shift (3:30 PM - 12 AM) grouping,
+ * sorted chronologically with earlier orders on top.
  */
 @Composable
 private fun KitchenKanbanBoard(
     orders: List<OrderEntity>,
     selectedStage: String,
     onSelectOrder: (OrderEntity) -> Unit,
-    onAction: (String, OrderEntity) -> Unit
+    onAction: (String, OrderEntity) -> Unit,
+    onResetFilters: (() -> Unit)? = null
 ) {
-    val displayOrders = if (selectedStage == "ALL") {
+    val stageFilteredOrders = if (selectedStage == "ALL") {
         orders
     } else {
         orders.filter { order ->
@@ -1070,22 +1992,155 @@ private fun KitchenKanbanBoard(
         }
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        items(displayOrders) { order ->
-            KitchenKanbanOrderCard(
-                order = order,
-                onClick = { onSelectOrder(order) },
-                onAction = { action -> onAction(action, order) }
-            )
+    // Chronological sorting:
+    // 1. Shift: Morning (6am-3pm) first, Evening (3:30pm-12am) second
+    // 2. Delivery Start Time: earliest minute on top (e.g. 11:00 AM before 12:30 PM before 01:30 PM)
+    // 3. Created Timestamp: earlier booked order on top
+    val sortedOrders = remember(stageFilteredOrders) {
+        stageFilteredOrders.sortedWith { o1, o2 -> TimeSlotUtils.compareOrdersForKitchenPrep(o1, o2) }
+    }
+
+    val morningOrders = remember(sortedOrders) {
+        sortedOrders.filter { TimeSlotUtils.isMorningShift(it.deliveryTimeSlot) }
+    }
+    val eveningOrders = remember(sortedOrders) {
+        sortedOrders.filter { TimeSlotUtils.isEveningShift(it.deliveryTimeSlot) }
+    }
+    val otherOrders = remember(sortedOrders) {
+        sortedOrders.filter { !TimeSlotUtils.isMorningShift(it.deliveryTimeSlot) && !TimeSlotUtils.isEveningShift(it.deliveryTimeSlot) }
+    }
+
+    if (sortedOrders.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(12.dp),
+                elevation = CardDefaults.cardElevation(2.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        Icons.Default.CalendarMonth,
+                        contentDescription = null,
+                        tint = Color(0xFF94A3B8),
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        "No orders found",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1E293B)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "There are no orders matching this stage and date/time filter.",
+                        fontSize = 12.sp,
+                        color = Color(0xFF64748B),
+                        textAlign = TextAlign.Center
+                    )
+                    if (onResetFilters != null) {
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Button(
+                            onClick = onResetFilters,
+                            colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Reset Date & Time Filters", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 40.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Group 1: Morning Shift Orders (06:00 AM – 03:00 PM)
+            if (morningOrders.isNotEmpty()) {
+                item {
+                    KitchenShiftHeaderSection(
+                        title = "☀️ Morning Shift Orders (सुबह - दोपहर तैयारी)",
+                        timeRange = "06:00 AM – 03:00 PM",
+                        ordersCount = morningOrders.size,
+                        containerColor = Color(0xFFFFFBEB),
+                        contentColor = Color(0xFF92400E),
+                        accentColor = SaffronPrimary
+                    )
+                }
+                items(morningOrders, key = { it.orderId }) { order ->
+                    KitchenKanbanOrderCard(
+                        order = order,
+                        onClick = { onSelectOrder(order) },
+                        onAction = { action -> onAction(action, order) }
+                    )
+                }
+            }
+
+            // Group 2: Evening Shift Orders (03:30 PM – 12:00 AM)
+            if (eveningOrders.isNotEmpty()) {
+                item {
+                    if (morningOrders.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                    }
+                    KitchenShiftHeaderSection(
+                        title = "🌙 Evening Shift Orders (शाम - रात तैयारी)",
+                        timeRange = "03:30 PM – 12:00 AM",
+                        ordersCount = eveningOrders.size,
+                        containerColor = Color(0xFFF5F3FF),
+                        contentColor = Color(0xFF5B21B6),
+                        accentColor = Color(0xFF7C3AED)
+                    )
+                }
+                items(eveningOrders, key = { it.orderId }) { order ->
+                    KitchenKanbanOrderCard(
+                        order = order,
+                        onClick = { onSelectOrder(order) },
+                        onAction = { action -> onAction(action, order) }
+                    )
+                }
+            }
+
+            // Group 3: Other Time Slot Orders (if any)
+            if (otherOrders.isNotEmpty()) {
+                item {
+                    if (morningOrders.isNotEmpty() || eveningOrders.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                    }
+                    KitchenShiftHeaderSection(
+                        title = "📦 Other Time Slot Orders (अन्य ऑर्डर्स)",
+                        timeRange = "All Slots",
+                        ordersCount = otherOrders.size,
+                        containerColor = Color(0xFFF8FAFC),
+                        contentColor = Color(0xFF334155),
+                        accentColor = Color(0xFF64748B)
+                    )
+                }
+                items(otherOrders, key = { it.orderId }) { order ->
+                    KitchenKanbanOrderCard(
+                        order = order,
+                        onClick = { onSelectOrder(order) },
+                        onAction = { action -> onAction(action, order) }
+                    )
+                }
+            }
         }
     }
 }
 
 /**
- * Rich Order Card matching Image 2
+ * Rich Order Card matching Image 2 with expandable details
  */
 @Composable
 private fun KitchenKanbanOrderCard(
@@ -1093,16 +2148,36 @@ private fun KitchenKanbanOrderCard(
     onClick: () -> Unit,
     onAction: (String) -> Unit
 ) {
+    var isExpanded by remember { mutableStateOf(false) }
+
+    val formattedDateDisplay = remember(order.deliveryDate) {
+        try {
+            val parsed = TimeSlotUtils.createDateFormat("yyyy-MM-dd").parse(order.deliveryDate)
+            if (parsed != null) {
+                TimeSlotUtils.createDateFormat("d MMM").format(parsed)
+            } else {
+                order.deliveryDate
+            }
+        } catch (e: Exception) {
+            order.deliveryDate
+        }
+    }
+
+    val isMorning = remember(order.deliveryTimeSlot) {
+        TimeSlotUtils.isMorningShift(order.deliveryTimeSlot)
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
         shape = RoundedCornerShape(10.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            // Top Row: Order ID, Time, Badge
+            // Top Row: Order ID, Time, Shift Badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1124,26 +2199,71 @@ private fun KitchenKanbanOrderCard(
                     }
                 }
 
-                Text(
-                    "12 May, ${order.deliveryTimeSlot.take(8)}",
-                    fontSize = 11.sp,
-                    color = Color.Gray
-                )
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = if (isMorning) Color(0xFFFFFBEB) else Color(0xFFF5F3FF),
+                    border = BorderStroke(1.dp, if (isMorning) Color(0xFFFDE68A) else Color(0xFFDDD6FE))
+                ) {
+                    Text(
+                        if (isMorning) "☀️ Morning Shift" else "🌙 Evening Shift",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isMorning) Color(0xFF92400E) else Color(0xFF5B21B6),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(4.dp))
 
             // Customer Name & Phone
-            Text(order.customerName, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1E293B))
-            Text(order.customerMobile, fontSize = 11.sp, color = Color.Gray)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(order.customerName, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1E293B))
+                Text(order.customerMobile, fontSize = 11.sp, color = Color.Gray)
+            }
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Delivery Slot
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Schedule, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(13.dp))
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(order.deliveryTimeSlot, fontSize = 11.sp, color = Color(0xFF475569))
+            // Delivery Slot with highlighted start time
+            Surface(
+                color = if (isMorning) Color(0xFFFEF3C7).copy(alpha = 0.35f) else Color(0xFFEDE9FE).copy(alpha = 0.35f),
+                shape = RoundedCornerShape(6.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Schedule,
+                            contentDescription = null,
+                            tint = if (isMorning) SaffronPrimary else Color(0xFF7C3AED),
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = "$formattedDateDisplay • ${order.deliveryTimeSlot}",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF1E293B)
+                        )
+                    }
+
+                    Text(
+                        text = if (isMorning) "6 AM – 3 PM" else "3:30 PM – 12 AM",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isMorning) Color(0xFFB45309) else Color(0xFF6D28D9)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(6.dp))
@@ -1159,14 +2279,34 @@ private fun KitchenKanbanOrderCard(
                     fontSize = 11.5.sp,
                     color = Color(0xFF334155),
                     modifier = Modifier.padding(6.dp),
-                    maxLines = 2,
+                    maxLines = if (isExpanded) 10 else 2,
                     overflow = TextOverflow.Ellipsis
                 )
             }
 
+            // Expandable details (Address & Handi / Containers)
+            if (isExpanded) {
+                Spacer(modifier = Modifier.height(6.dp))
+                if (order.deliveryAddress.isNotBlank()) {
+                    Row(verticalAlignment = Alignment.Top) {
+                        Icon(Icons.Default.LocationOn, contentDescription = null, tint = Color(0xFFE11D48), modifier = Modifier.size(13.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(order.deliveryAddress, fontSize = 11.sp, color = Color(0xFF475569))
+                    }
+                }
+                if (order.bartanDescription.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Row(verticalAlignment = Alignment.Top) {
+                        Icon(Icons.Default.SoupKitchen, contentDescription = null, tint = AmberSecondary, modifier = Modifier.size(13.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Containers: ${order.bartanDescription} (OTP: ${order.deliveryOtp})", fontSize = 10.5.sp, color = Color(0xFF92400E))
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Amount & Advance
+            // Amount, Advance, Expand toggle & Action Button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1174,20 +2314,42 @@ private fun KitchenKanbanOrderCard(
             ) {
                 Column {
                     Text("Total: ₹${order.totalAmount.toInt()}", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF0F172A))
-                    Text("Advance: ₹${order.advancePaidAmount.toInt()}", fontSize = 10.5.sp, color = VegGreen)
+                    Text("Adv: ₹${order.advancePaidAmount.toInt()} • Bal: ₹${order.balanceAmount.toInt()}", fontSize = 10.5.sp, color = VegGreen)
                 }
 
-                // Action Buttons depending on status
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Quick Expand / Collapse details button
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = Color(0xFFF1F5F9),
+                        modifier = Modifier.clickable { isExpanded = !isExpanded }
+                    ) {
+                        Text(
+                            if (isExpanded) "कम ▲" else "विवरण ▼",
+                            fontSize = 10.5.sp,
+                            color = Color(0xFF475569),
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp)
+                        )
+                    }
+
+                    // Action Buttons depending on status
                     when (order.orderStatus) {
                         OrderStatus.NEW, OrderStatus.CONFIRMED, OrderStatus.ACCEPTED -> {
+                            val isPrepAllowed = TimeSlotUtils.isKitchenPrepAllowed(order.deliveryDate, order.deliveryTimeSlot)
+                            val prepLabel = TimeSlotUtils.getKitchenPrepCountdownLabel(order.deliveryDate, order.deliveryTimeSlot)
                             Button(
                                 onClick = { onAction("PREPARATION") },
-                                colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isPrepAllowed) SaffronPrimary else Color(0xFF94A3B8)
+                                ),
                                 shape = RoundedCornerShape(6.dp),
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                             ) {
-                                Text("Preparation", fontSize = 11.sp)
+                                Text(prepLabel, fontSize = 11.sp)
                             }
                         }
                         OrderStatus.PREPARING -> {
@@ -1636,49 +2798,393 @@ private fun AssignDeliveryBoyDialog(
     order: OrderEntity,
     deliveryBoys: List<com.example.data.models.DeliveryBoyEntity>,
     onDismiss: () -> Unit,
-    onAssign: (com.example.data.models.DeliveryBoyEntity) -> Unit
+    onAssign: (com.example.data.models.DeliveryBoyEntity, String, Int, Int, Int) -> Unit
 ) {
+    // Smart estimation based on itemsSummary
+    val suggestedCounts = remember(order.itemsSummary) {
+        val lower = order.itemsSummary.lowercase()
+        var handis = 2
+        if (lower.contains("kg") || lower.contains("kilo")) {
+            val kgMatch = Regex("""(\d+)\s*(?:kg|kilo)""").find(lower)
+            val kgVal = kgMatch?.groupValues?.get(1)?.toIntOrNull() ?: 2
+            handis = when {
+                kgVal <= 2 -> 1
+                kgVal <= 5 -> 2
+                kgVal <= 10 -> 4
+                else -> (kgVal / 3).coerceAtLeast(2)
+            }
+        } else if (lower.contains("gravy") || lower.contains("curry") || lower.contains("dal")) {
+            handis = 2
+        } else if (lower.contains("plate") || lower.contains("pack")) {
+            handis = 1
+        }
+        val spoons = if (handis > 0) handis.coerceIn(1, 4) else 1
+        val boxes = if (handis >= 2) 2 else 1
+        Triple(handis, spoons, boxes)
+    }
+
+    var isReusablePackaging by remember { mutableStateOf(true) }
+    var handiCount by remember { mutableIntStateOf(suggestedCounts.first) }
+    var spoonsCount by remember { mutableIntStateOf(suggestedCounts.second) }
+    var boxesCount by remember { mutableIntStateOf(suggestedCounts.third) }
+    var customRemarks by remember {
+        mutableStateOf(
+            if (order.bartanDescription.isNotBlank() && order.bartanDescription != "Handi & Serving Trays") {
+                order.bartanDescription
+            } else {
+                "${suggestedCounts.first} Metal Handi/Degs, ${suggestedCounts.second} Serving Spoons, ${suggestedCounts.third} Hot Crate"
+            }
+        )
+    }
+
+    fun syncRemarks(h: Int, s: Int, b: Int, isReusable: Boolean) {
+        if (!isReusable) {
+            customRemarks = "Disposable Packaging (No Bartan to Return)"
+        } else {
+            val parts = mutableListOf<String>()
+            if (h > 0) parts.add("$h Metal Handi/Degs")
+            if (s > 0) parts.add("$s Serving Spoons")
+            if (b > 0) parts.add("$b Hot Crate/Boxes")
+            if (parts.isEmpty()) parts.add("1 Standard Deg/Handi")
+            customRemarks = parts.joinToString(", ")
+        }
+    }
+
+    var selectedDeliveryBoy by remember { mutableStateOf<com.example.data.models.DeliveryBoyEntity?>(deliveryBoys.firstOrNull { !it.isBusy } ?: deliveryBoys.firstOrNull()) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Assign Delivery Partner for #${order.orderId}", fontWeight = FontWeight.Bold, fontSize = 15.sp) },
-        text = {
+        title = {
             Column {
-                deliveryBoys.forEach { boy ->
-                    Row(
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.SoupKitchen, contentDescription = null, tint = SaffronPrimary, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Assign Delivery Partner & Bartan", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF0F172A))
+                }
+                Text("Order #${order.orderId} • ${order.customerName}", fontSize = 12.sp, color = Color(0xFF64748B))
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                // Order items summary pill
+                Surface(
+                    color = Color(0xFFF8FAFC),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text("📦 Ordered Items (मेन्यू):", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF475569))
+                        Text(order.itemsSummary, fontSize = 12.sp, color = Color(0xFF1E293B), fontWeight = FontWeight.Medium)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Packaging Type Toggle
+                Text("1. Packaging & Bartan Mode (बर्तन का हिसाब):", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = Color(0xFF0F172A))
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isReusablePackaging) Color(0xFFFFF7ED) else Color(0xFFF8FAFC),
+                        border = BorderStroke(if (isReusablePackaging) 1.5.dp else 1.dp, if (isReusablePackaging) SaffronPrimary else Color(0xFFCBD5E1)),
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onAssign(boy) }
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(shape = CircleShape, color = Color(0xFFE2E8F0), modifier = Modifier.size(32.dp)) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.Person, contentDescription = null, tint = Color(0xFF475569), modifier = Modifier.size(16.dp))
+                            .weight(1f)
+                            .clickable {
+                                isReusablePackaging = true
+                                syncRemarks(handiCount, spoonsCount, boxesCount, true)
                             }
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(boy.name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text("${boy.mobile} • ${if (boy.isBusy) "Busy" else "Available"} • ${boy.todayCompletedDeliveries} delivered", fontSize = 11.sp, color = Color.Gray)
-                        }
-                        Button(
-                            onClick = { onAssign(boy) },
-                            colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
-                            shape = RoundedCornerShape(6.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text("Assign", fontSize = 11.sp)
+                            Text("🥘 Reusable Bartan", fontWeight = FontWeight.Bold, fontSize = 11.5.sp, color = if (isReusablePackaging) SaffronPrimary else Color(0xFF475569))
+                            Text("Handi return required 🔄", fontSize = 9.5.sp, color = Color(0xFF92400E))
                         }
                     }
-                    HorizontalDivider(color = Color(0xFFF1F5F9))
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (!isReusablePackaging) Color(0xFFEFF6FF) else Color(0xFFF8FAFC),
+                        border = BorderStroke(if (!isReusablePackaging) 1.5.dp else 1.dp, if (!isReusablePackaging) Color(0xFF2563EB) else Color(0xFFCBD5E1)),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable {
+                                isReusablePackaging = false
+                                syncRemarks(0, 0, 0, false)
+                            }
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("📦 Disposable Pack", fontWeight = FontWeight.Bold, fontSize = 11.5.sp, color = if (!isReusablePackaging) Color(0xFF2563EB) else Color(0xFF475569))
+                            Text("No utensils return ❌", fontSize = 9.5.sp, color = Color.Gray)
+                        }
+                    }
+                }
+
+                if (isReusablePackaging) {
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Smart Utensil Item Counters
+                    Surface(
+                        color = Color(0xFFFFFBEB),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("💡 Smart Auto-Calculated for Menu", fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF92400E))
+                                Surface(shape = RoundedCornerShape(4.dp), color = AmberSecondary) {
+                                    Text("${handiCount + spoonsCount + boxesCount} Items", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color.Black, modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp))
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Counter 1: Handis / Degs
+                            UtensilCounterRow(
+                                icon = "🍲",
+                                label = "Metal Handi / Degs (हांडी)",
+                                count = handiCount,
+                                onDecrement = {
+                                    if (handiCount > 0) {
+                                        handiCount--
+                                        syncRemarks(handiCount, spoonsCount, boxesCount, true)
+                                    }
+                                },
+                                onIncrement = {
+                                    handiCount++
+                                    syncRemarks(handiCount, spoonsCount, boxesCount, true)
+                                }
+                            )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            // Counter 2: Serving Spoons
+                            UtensilCounterRow(
+                                icon = "🥄",
+                                label = "Serving Spoons (चम्मच)",
+                                count = spoonsCount,
+                                onDecrement = {
+                                    if (spoonsCount > 0) {
+                                        spoonsCount--
+                                        syncRemarks(handiCount, spoonsCount, boxesCount, true)
+                                    }
+                                },
+                                onIncrement = {
+                                    spoonsCount++
+                                    syncRemarks(handiCount, spoonsCount, boxesCount, true)
+                                }
+                            )
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            // Counter 3: Crates / Bags / Hot Pots
+                            UtensilCounterRow(
+                                icon = "📦",
+                                label = "Hot Crate / Box (क्रेट्स)",
+                                count = boxesCount,
+                                onDecrement = {
+                                    if (boxesCount > 0) {
+                                        boxesCount--
+                                        syncRemarks(handiCount, spoonsCount, boxesCount, true)
+                                    }
+                                },
+                                onIncrement = {
+                                    boxesCount++
+                                    syncRemarks(handiCount, spoonsCount, boxesCount, true)
+                                }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Editable description field
+                    OutlinedTextField(
+                        value = customRemarks,
+                        onValueChange = { customRemarks = it },
+                        label = { Text("Utensil Details shown to Customer & Rider", fontSize = 11.sp) },
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = LocalTextStyle.current.copy(fontSize = 11.5.sp),
+                        shape = RoundedCornerShape(8.dp),
+                        singleLine = true
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Select Delivery Partner Section
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("2. Choose Delivery Partner (राइडर):", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = Color(0xFF0F172A))
+                    Text("${deliveryBoys.size} Available", fontSize = 11.sp, color = VegGreen, fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                deliveryBoys.forEach { boy ->
+                    val isSelected = selectedDeliveryBoy?.id == boy.id
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isSelected) Color(0xFFFFF7ED) else Color.White,
+                        border = BorderStroke(if (isSelected) 1.5.dp else 1.dp, if (isSelected) SaffronPrimary else Color(0xFFE2E8F0)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp)
+                            .clickable { selectedDeliveryBoy = boy }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = if (isSelected) SaffronPrimary else Color(0xFFE2E8F0),
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.Person,
+                                        contentDescription = null,
+                                        tint = if (isSelected) Color.White else Color(0xFF475569),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(boy.name, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF0F172A))
+                                    if (boy.pendingBartanCount > 0) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Surface(color = Color(0xFFFEF3C7), shape = RoundedCornerShape(4.dp)) {
+                                            Text("🍲 ${boy.pendingBartanCount} bartan active", fontSize = 9.5.sp, color = Color(0xFF92400E), modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                                        }
+                                    }
+                                }
+                                Text("${boy.mobile} • ${if (boy.isBusy) "Busy" else "Available"} • ${boy.todayCompletedDeliveries} delivered", fontSize = 11.sp, color = Color.Gray)
+                            }
+
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = { selectedDeliveryBoy = boy },
+                                colors = RadioButtonDefaults.colors(selectedColor = SaffronPrimary)
+                            )
+                        }
+                    }
                 }
             }
         },
-        confirmButton = {},
+        confirmButton = {
+            Button(
+                onClick = {
+                    val boy = selectedDeliveryBoy ?: deliveryBoys.firstOrNull()
+                    if (boy != null) {
+                        val finalDesc = if (isReusablePackaging) {
+                            customRemarks.ifBlank { "${handiCount} Handi, ${spoonsCount} Spoons" }
+                        } else {
+                            "Disposable Packaging (No Bartan to Return)"
+                        }
+                        val finalHandis = if (isReusablePackaging) handiCount else 0
+                        val finalSpoons = if (isReusablePackaging) spoonsCount else 0
+                        val finalBoxes = if (isReusablePackaging) boxesCount else 0
+                        onAssign(boy, finalDesc, finalHandis, finalSpoons, finalBoxes)
+                    }
+                },
+                enabled = selectedDeliveryBoy != null || deliveryBoys.isNotEmpty(),
+                colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                val totalPcs = if (isReusablePackaging) (handiCount + spoonsCount + boxesCount) else 0
+                val boyName = selectedDeliveryBoy?.name?.split(" ")?.firstOrNull() ?: "Partner"
+                Text(
+                    if (totalPcs > 0) "Assign & Handover $totalPcs Containers to $boyName 🚀" else "Assign to $boyName 🚀",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+}
+
+@Composable
+private fun UtensilCounterRow(
+    icon: String,
+    label: String,
+    count: Int,
+    onDecrement: () -> Unit,
+    onIncrement: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(icon, fontSize = 14.sp)
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(label, fontSize = 11.5.sp, color = Color(0xFF334155), fontWeight = FontWeight.Medium)
+        }
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = Color.White,
+                border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
+                modifier = Modifier
+                    .size(26.dp)
+                    .clickable { onDecrement() }
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text("-", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF334155))
+                }
+            }
+
+            Text(
+                count.toString(),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF0F172A),
+                modifier = Modifier.padding(horizontal = 10.dp)
+            )
+
+            Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = SaffronPrimary,
+                modifier = Modifier
+                    .size(26.dp)
+                    .clickable { onIncrement() }
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text("+", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.White)
+                }
+            }
+        }
+    }
 }
 
 private fun handleOrderAction(
@@ -1690,8 +3196,14 @@ private fun handleOrderAction(
 ) {
     when (action) {
         "PREPARATION" -> {
-            viewModel.updateOrderStatus(order.orderId, OrderStatus.PREPARING)
-            Toast.makeText(context, "Order #${order.orderId} moved to Preparation!", Toast.LENGTH_SHORT).show()
+            val isAllowed = TimeSlotUtils.isKitchenPrepAllowed(order.deliveryDate, order.deliveryTimeSlot)
+            if (!isAllowed) {
+                val countdown = TimeSlotUtils.getKitchenPrepCountdownLabel(order.deliveryDate, order.deliveryTimeSlot)
+                Toast.makeText(context, "⚠️ Preparation Locked: Unlocks 10 hours before delivery slot ($countdown)", Toast.LENGTH_LONG).show()
+            } else {
+                viewModel.updateOrderStatus(order.orderId, OrderStatus.PREPARING)
+                Toast.makeText(context, "Order #${order.orderId} moved to Preparation! 🍳", Toast.LENGTH_SHORT).show()
+            }
         }
         "MARK_READY" -> {
             viewModel.updateOrderStatus(order.orderId, OrderStatus.READY)

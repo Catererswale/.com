@@ -159,8 +159,8 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
     var customerAddress by remember { mutableStateOf("") }
     var isCustomerFound by remember { mutableStateOf(false) }
 
-    val todayCalendar = Calendar.getInstance()
-    val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    val todayCalendar = com.example.util.TimeSlotUtils.getIndianCalendar()
+    val dateFormat = com.example.util.TimeSlotUtils.createDateFormat("yyyy-MM-dd")
     val todayFormatted = dateFormat.format(todayCalendar.time)
 
     var eventDate by remember { mutableStateOf(todayFormatted) }
@@ -1395,7 +1395,7 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
 
                                         Button(
                                             onClick = {
-                                                val c = Calendar.getInstance()
+                                                val c = com.example.util.TimeSlotUtils.getIndianCalendar()
                                                 val dpd = DatePickerDialog(
                                                     context,
                                                     { _, year, month, dayOfMonth ->
@@ -1422,7 +1422,7 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
-                                        val cal1 = Calendar.getInstance()
+                                        val cal1 = com.example.util.TimeSlotUtils.getIndianCalendar()
                                         val dToday = dateFormat.format(cal1.time)
                                         cal1.add(Calendar.DAY_OF_YEAR, 1)
                                         val dTomorrow = dateFormat.format(cal1.time)

@@ -121,7 +121,9 @@ data class CatererEntity(
     val gravyPersonsPerKg: Double = 8.33,   // e.g. 1 Kg serves ~8.3 persons (10 persons = 1.2 Kg)
     val rotiPersonsPerUnit: Double = 0.5,   // 2 rotis per person
     // Caterer choice for Add-on services: अगर सिर्फ खाना बेचना है तो false
-    val offersAddonServices: Boolean = true
+    val offersAddonServices: Boolean = true,
+    // Dietary Specialization: "PURE_VEG" (100% Shuddh Shakahari), "BOTH" (Veg & Non-Veg Multi-cuisine), "NON_VEG" (Non-Veg Specialist)
+    val dietaryType: String = "BOTH"
 )
 
 @Entity(tableName = "menu_items")
@@ -234,7 +236,15 @@ data class OrderEntity(
     // Offline Booking & Cash Collection Tracking
     val isOfflineBooking: Boolean = false,
     val cashCollectedByDeliveryBoy: Double = 0.0,
-    val isCashSubmittedToKitchen: Boolean = false
+    val isCashSubmittedToKitchen: Boolean = false,
+    // Cancellation, Reschedule & Kitchen Protection
+    val cancellationReason: String = "",
+    val refundAmount: Double = 0.0,
+    val kitchenSettlementAmount: Double = 0.0,
+    val companyAdsFundAmount: Double = 0.0,
+    val isRescheduled: Boolean = false,
+    val isNonCancellable: Boolean = false,
+    val prepStartedTimestamp: Long? = null
 )
 
 @Entity(tableName = "delivery_boys")
@@ -250,7 +260,8 @@ data class DeliveryBoyEntity(
     val isBusy: Boolean = false,
     val todayCompletedDeliveries: Int = 0,
     val cashToSubmit: Double = 0.0,
-    val pendingBartanCount: Int = 0
+    val pendingBartanCount: Int = 0,
+    val isMobileVerified: Boolean = true
 )
 
 @Entity(tableName = "bartan_records")
@@ -271,7 +282,42 @@ data class BartanRecordEntity(
     val collectedDate: String = "",
     val returnStatus: String = "PENDING", // PENDING, PICKUP_SCHEDULED, COLLECTED, RETURNED_TO_KITCHEN
     val lastMorningAlertDate: String = "",
-    val morningAlertSent: Boolean = false
+    val morningAlertSent: Boolean = false,
+    // Re-assigned Pickup Boy (if different boy collects bartan)
+    val pickupBoyId: String = "",
+    val pickupBoyName: String = "",
+    val pickupBoyMobile: String = "",
+    // Categorized utensil quantities for stock subtraction
+    val handiCount: Int = 2,
+    val spoonsCount: Int = 2,
+    val boxesCount: Int = 1
+)
+
+@Entity(tableName = "kitchen_utensils_master")
+data class KitchenUtensilEntity(
+    @PrimaryKey val id: String,
+    val kitchenId: String = "caterer_1",
+    val name: String,
+    val icon: String = "🍲",
+    val totalStock: Int = 50,
+    val unit: String = "Pcs"
+)
+
+data class DishPackBreakdown(
+    val orderId: String,
+    val customerName: String,
+    val deliveryTimeSlot: String,
+    val quantity: Double,
+    val unit: String,
+    val deliveryBoyName: String = ""
+)
+
+data class DishPreparationSummary(
+    val dishName: String,
+    val totalQuantity: Double,
+    val unit: String,
+    val packs: List<DishPackBreakdown>,
+    val foodType: FoodType = FoodType.NON_VEG
 )
 
 @Entity(tableName = "app_notifications")
@@ -319,7 +365,8 @@ data class KitchenSettingsConfig(
     val minimumOrderValue: Double = 2000.0,
     val defaultAdvancePercentage: Int = 30,
     val gstTaxPercentage: Double = 5.0,
-    val deliveryChargePerKm: Double = 15.0,
+    val isDeliveryChargeEnabled: Boolean = false, // Caterer option: false = Free Delivery for customers, true = Charge per KM
+    val deliveryChargePerKm: Double = 0.0, // Per KM delivery rate set by caterer
     val isKitchenOpen: Boolean = true,
     val autoSendWhatsappInvoice: Boolean = true,
     val openingTime: String = "07:00 AM",
@@ -355,7 +402,10 @@ data class KitchenSettingsConfig(
     val rotiPersonsPerUnit: Double = 0.5,   // 2 rotis per person
 
     // Caterer choice: Offer event add-on services or pure food only
-    val offersAddonServices: Boolean = true
+    val offersAddonServices: Boolean = true,
+
+    // Real-time audio alarm chime for new incoming orders
+    val isOrderSoundAlertEnabled: Boolean = true
 )
 
 @Entity(tableName = "partner_reviews")

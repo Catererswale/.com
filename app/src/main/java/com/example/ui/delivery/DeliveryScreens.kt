@@ -213,6 +213,47 @@ fun DeliveryOrdersScreen(
                     Text("📍 Address: ${order.deliveryAddress}", fontSize = 12.sp, color = Color.Gray)
                     Text("📦 Items: ${order.itemsSummary}", fontSize = 12.sp, color = Color(0xFF212121), fontWeight = FontWeight.Medium)
 
+                    if (order.isBartanPending || order.bartanDescription.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Surface(
+                            color = Color(0xFFFFFBEB),
+                            shape = RoundedCornerShape(8.dp),
+                            border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.SoupKitchen, contentDescription = null, tint = AmberSecondary, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text("🥘 Kitchen Bartan Handover:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF92400E))
+                                        Surface(color = Color(0xFFFEF3C7), shape = RoundedCornerShape(4.dp)) {
+                                            Text(
+                                                text = if (order.isBartanReturned) "Returned ✅" else "With You ⏳",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (order.isBartanReturned) Color(0xFF166534) else Color(0xFFB45309),
+                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        "${order.bartanDescription} • किचन से प्राप्त किया गया, ग्राहक को सुरक्षित सौंपें।",
+                                        fontSize = 10.5.sp,
+                                        color = Color(0xFF78350F)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(
                         modifier = Modifier
@@ -277,6 +318,23 @@ fun DeliveryOrdersScreen(
                             .fillMaxWidth()
                             .testTag("delivery_otp_input")
                     )
+                    if (order.isBartanPending || order.bartanDescription.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Surface(
+                            color = Color(0xFFFFFBEB),
+                            shape = RoundedCornerShape(6.dp),
+                            border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                "🥘 Kitchen Handover: ${order.bartanDescription}\n(Ensure handover to customer before OTP submit)",
+                                fontSize = 11.sp,
+                                color = Color(0xFF92400E),
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(8.dp)
+                            )
+                        }
+                    }
                     if (errorMessage != null) {
                         Text(errorMessage!!, color = Color.Red, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
                     }

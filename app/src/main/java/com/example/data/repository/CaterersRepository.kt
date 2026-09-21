@@ -9,6 +9,7 @@ import com.example.data.models.CatererEntity
 import com.example.data.models.DeliveryBoyEntity
 import com.example.data.models.FavoriteKitchenEntity
 import com.example.data.models.FoodType
+import com.example.data.models.KitchenUtensilEntity
 import com.example.data.models.KycStatus
 import com.example.data.models.MenuItemEntity
 import com.example.data.models.NotificationEntity
@@ -70,7 +71,8 @@ class CaterersRepository(private val dao: CaterersDao) {
                     aadhaarNumber = "9988 7766 5544",
                     panNumber = "ABCDE1234F",
                     bankAccount = "918273645012",
-                    bankIfsc = "HDFC0001234"
+                    bankIfsc = "HDFC0001234",
+                    dietaryType = "BOTH"
                 ),
                 CatererEntity(
                     id = "caterer_2",
@@ -94,7 +96,8 @@ class CaterersRepository(private val dao: CaterersDao) {
                     aadhaarNumber = "1122 3344 5566",
                     panNumber = "XYZAB5678C",
                     bankAccount = "501002345678",
-                    bankIfsc = "ICIC0005678"
+                    bankIfsc = "ICIC0005678",
+                    dietaryType = "BOTH"
                 ),
                 CatererEntity(
                     id = "caterer_3",
@@ -115,7 +118,29 @@ class CaterersRepository(private val dao: CaterersDao) {
                     city = "New Delhi",
                     ownerMobile = "+91 9900112233",
                     kycStatus = KycStatus.APPROVED,
-                    offersAddonServices = false // Demonstrates caterer partner who only sells food (सिर्फ खाना बेचना है)
+                    offersAddonServices = false,
+                    dietaryType = "BOTH"
+                ),
+                CatererEntity(
+                    id = "caterer_4",
+                    name = "Shri Krishna Pure Veg Caterers",
+                    kitchenName = "Shri Krishna Shuddh Shakahari Rasoi",
+                    logoUrl = "",
+                    bannerUrl = "",
+                    rating = 4.9f,
+                    reviewCount = 428,
+                    deliveryTimeMinutes = 35,
+                    minOrderAmount = 1200.0,
+                    deliveryCharge = 100.0,
+                    distanceKm = 1.5,
+                    fssaiLicense = "11523000445566",
+                    isFssaiVerified = true,
+                    isOpenForBooking = true,
+                    address = "Shop 14, Mandir Marg, Karol Bagh",
+                    city = "New Delhi",
+                    ownerMobile = "+91 9811223344",
+                    kycStatus = KycStatus.APPROVED,
+                    dietaryType = "PURE_VEG"
                 )
             )
             dao.insertCaterers(caterersList)
@@ -188,6 +213,110 @@ class CaterersRepository(private val dao: CaterersDao) {
                     description = "Refreshing chilled yogurt lassi flavoured with fresh mint and roasted cumin.",
                     imageUrl = "", foodType = FoodType.VEG, unitType = UnitType.LITRE,
                     pricePerUnit = 140.0, minQuantity = 2.0, maxQuantity = 100.0, stepQuantity = 1.0
+                ),
+                // Shahi Dawat Catering (caterer_2)
+                MenuItemEntity(
+                    id = "m10", catererId = "caterer_2", catererName = "Shahi Dawat Catering",
+                    category = "Chicken Biryani", name = "Awadhi Dum Chicken Biryani",
+                    description = "Traditional slow cooked Awadhi biryani with kewra water and saffron chicken.",
+                    imageUrl = "", foodType = FoodType.NON_VEG, unitType = UnitType.KG,
+                    pricePerUnit = 450.0, minQuantity = 1.0, maxQuantity = 50.0, stepQuantity = 0.5,
+                    isPopular = true, isRecommended = true
+                ),
+                MenuItemEntity(
+                    id = "m11", catererId = "caterer_2", catererName = "Shahi Dawat Catering",
+                    category = "Veg Biryani", name = "Navratan Saffron Veg Biryani",
+                    description = "Mixed farm vegetables and cottage cheese layered with golden saffron rice.",
+                    imageUrl = "", foodType = FoodType.VEG, unitType = UnitType.KG,
+                    pricePerUnit = 320.0, minQuantity = 1.0, maxQuantity = 50.0, stepQuantity = 0.5,
+                    isRecommended = true
+                ),
+                MenuItemEntity(
+                    id = "m12", catererId = "caterer_2", catererName = "Shahi Dawat Catering",
+                    category = "Mutton Gravy", name = "Shahi Mutton Korma Handi",
+                    description = "Melt-in-mouth mutton shank pieces simmered in thick cashew-onion gravy.",
+                    imageUrl = "", foodType = FoodType.NON_VEG, unitType = UnitType.KG,
+                    pricePerUnit = 720.0, minQuantity = 1.0, maxQuantity = 30.0, stepQuantity = 0.5,
+                    isPopular = true
+                ),
+                MenuItemEntity(
+                    id = "m13", catererId = "caterer_2", catererName = "Shahi Dawat Catering",
+                    category = "Veg Gravy", name = "Dal Makhani (Bukhara Style)",
+                    description = "Slow cooked black lentils on charcoal overnight with white butter and cream.",
+                    imageUrl = "", foodType = FoodType.VEG, unitType = UnitType.KG,
+                    pricePerUnit = 290.0, minQuantity = 1.0, maxQuantity = 40.0, stepQuantity = 0.5
+                ),
+                MenuItemEntity(
+                    id = "m14", catererId = "caterer_2", catererName = "Shahi Dawat Catering",
+                    category = "Desserts", name = "Rabdi Malpua Platter",
+                    description = "Crispy golden malpua served with rich reduced milk rabdi and pistachios.",
+                    imageUrl = "", foodType = FoodType.VEG, unitType = UnitType.KG,
+                    pricePerUnit = 380.0, minQuantity = 1.0, maxQuantity = 30.0, stepQuantity = 0.5
+                ),
+                // Royal Banquet Kitchens (caterer_3)
+                MenuItemEntity(
+                    id = "m15", catererId = "caterer_3", catererName = "Royal Banquet Kitchens",
+                    category = "Chicken Biryani", name = "Royal Kolkata Chicken Biryani",
+                    description = "Lightly spiced long-grain biryani with tender chicken and golden browned potatoes.",
+                    imageUrl = "", foodType = FoodType.NON_VEG, unitType = UnitType.KG,
+                    pricePerUnit = 420.0, minQuantity = 1.0, maxQuantity = 50.0, stepQuantity = 0.5,
+                    isPopular = true
+                ),
+                MenuItemEntity(
+                    id = "m16", catererId = "caterer_3", catererName = "Royal Banquet Kitchens",
+                    category = "Veg Biryani", name = "Paneer Tikka Dum Biryani",
+                    description = "Tandoor roasted paneer cubes tossed in spicy masala layered in fragrant rice.",
+                    imageUrl = "", foodType = FoodType.VEG, unitType = UnitType.KG,
+                    pricePerUnit = 350.0, minQuantity = 1.0, maxQuantity = 50.0, stepQuantity = 0.5,
+                    isRecommended = true
+                ),
+                MenuItemEntity(
+                    id = "m17", catererId = "caterer_3", catererName = "Royal Banquet Kitchens",
+                    category = "Mutton Biryani", name = "Degi Mutton Yakhni Biryani",
+                    description = "Rich mutton cooked in seasoned yakhni broth with basmati rice.",
+                    imageUrl = "", foodType = FoodType.NON_VEG, unitType = UnitType.KG,
+                    pricePerUnit = 780.0, minQuantity = 1.0, maxQuantity = 40.0, stepQuantity = 0.5,
+                    isPopular = true
+                ),
+                MenuItemEntity(
+                    id = "m18", catererId = "caterer_3", catererName = "Royal Banquet Kitchens",
+                    category = "Desserts", name = "Kesari Phirni in Earthen Pots",
+                    description = "Fine ground basmati rice pudding topped with silver vark and almonds.",
+                    imageUrl = "", foodType = FoodType.VEG, unitType = UnitType.PORTION,
+                    pricePerUnit = 60.0, minQuantity = 10.0, maxQuantity = 200.0, stepQuantity = 5.0
+                ),
+                // Shri Krishna Pure Veg Caterers (caterer_4) - 100% Pure Shakahari
+                MenuItemEntity(
+                    id = "m19", catererId = "caterer_4", catererName = "Shri Krishna Pure Veg Caterers",
+                    category = "Veg Biryani", name = "Shahi Paneer Dum Handi Biryani",
+                    description = "100% Pure Veg: Fragrant basmati rice slow dum cooked with marinated malai paneer & saffron.",
+                    imageUrl = "", foodType = FoodType.VEG, unitType = UnitType.KG,
+                    pricePerUnit = 320.0, minQuantity = 1.0, maxQuantity = 50.0, stepQuantity = 0.5,
+                    isPopular = true, isRecommended = true
+                ),
+                MenuItemEntity(
+                    id = "m20", catererId = "caterer_4", catererName = "Shri Krishna Pure Veg Caterers",
+                    category = "Veg Gravy", name = "Dal Makhani (Desi Ghee Bukhara)",
+                    description = "100% Pure Veg: Black urad lentils slow simmered for 18 hours in pure cow desi ghee.",
+                    imageUrl = "", foodType = FoodType.VEG, unitType = UnitType.KG,
+                    pricePerUnit = 290.0, minQuantity = 1.0, maxQuantity = 40.0, stepQuantity = 0.5,
+                    isPopular = true
+                ),
+                MenuItemEntity(
+                    id = "m21", catererId = "caterer_4", catererName = "Shri Krishna Pure Veg Caterers",
+                    category = "Veg Gravy", name = "Kaju Shahi Paneer Butter Masala",
+                    description = "100% Pure Veg: Soft paneer cubes cooked in rich cashew and ripe tomato velvet gravy.",
+                    imageUrl = "", foodType = FoodType.VEG, unitType = UnitType.KG,
+                    pricePerUnit = 380.0, minQuantity = 1.0, maxQuantity = 40.0, stepQuantity = 0.5,
+                    isRecommended = true
+                ),
+                MenuItemEntity(
+                    id = "m22", catererId = "caterer_4", catererName = "Shri Krishna Pure Veg Caterers",
+                    category = "Desserts", name = "Gulab Jamun Handi (Desi Ghee)",
+                    description = "100% Pure Veg: Melt-in-mouth mawa gulab jamun soaked in rose-cardamom sugar syrup.",
+                    imageUrl = "", foodType = FoodType.VEG, unitType = UnitType.PORTION,
+                    pricePerUnit = 45.0, minQuantity = 10.0, maxQuantity = 250.0, stepQuantity = 5.0,
+                    isPopular = true
                 )
             )
             dao.insertMenuItems(menuItems)
@@ -574,6 +703,18 @@ class CaterersRepository(private val dao: CaterersDao) {
                     targetRole = UserRole.CUSTOMER
                 )
             )
+
+            // Seed default kitchen utensils inventory
+            val defaultUtensils = listOf(
+                KitchenUtensilEntity(id = "utensil_1", kitchenId = "caterer_1", name = "Biryani Handi / Tapela", icon = "🍲", totalStock = 50, unit = "Pcs"),
+                KitchenUtensilEntity(id = "utensil_2", kitchenId = "caterer_1", name = "Bada Chammach / Karchi", icon = "🥄", totalStock = 80, unit = "Pcs"),
+                KitchenUtensilEntity(id = "utensil_3", kitchenId = "caterer_1", name = "Kachumber Box / Dabba", icon = "🥗", totalStock = 40, unit = "Pcs"),
+                KitchenUtensilEntity(id = "utensil_4", kitchenId = "caterer_1", name = "Raita Bowl / Dabba", icon = "🥣", totalStock = 30, unit = "Pcs"),
+                KitchenUtensilEntity(id = "utensil_5", kitchenId = "caterer_1", name = "Chafing Dish / Buffet Stand", icon = "🥘", totalStock = 15, unit = "Sets")
+            )
+            for (u in defaultUtensils) {
+                dao.insertUtensil(u)
+            }
         }
     }
 
@@ -729,6 +870,10 @@ class CaterersRepository(private val dao: CaterersDao) {
         return orderId
     }
 
+    suspend fun updateOrder(order: OrderEntity) {
+        dao.updateOrder(order)
+    }
+
     suspend fun insertNotification(notification: NotificationEntity) {
         dao.insertNotification(notification)
     }
@@ -763,17 +908,70 @@ class CaterersRepository(private val dao: CaterersDao) {
         }
     }
 
-    suspend fun assignDeliveryBoy(orderId: String, boy: DeliveryBoyEntity, context: Context? = null) {
-        dao.assignDeliveryBoy(
+    suspend fun assignDeliveryBoy(
+        orderId: String,
+        boy: DeliveryBoyEntity,
+        bartanDescription: String? = null,
+        handiCount: Int = 0,
+        spoonsCount: Int = 0,
+        boxesCount: Int = 0,
+        context: Context? = null
+    ) {
+        val order = dao.getOrderById(orderId)
+        val finalBartanDesc = bartanDescription ?: order?.bartanDescription ?: "Handi & Serving Spoons"
+        val totalContainers = handiCount + spoonsCount + boxesCount
+        val isDisposable = finalBartanDesc.contains("Disposable", ignoreCase = true) || finalBartanDesc.contains("डिस्पोजेबल", ignoreCase = true) || finalBartanDesc.contains("No Bartan", ignoreCase = true)
+        val hasContainers = !isDisposable && (totalContainers > 0 || bartanDescription != null)
+
+        dao.assignDeliveryBoyWithBartan(
             orderId = orderId,
             boyId = boy.id,
             boyName = boy.name,
             boyMobile = boy.mobile,
-            status = OrderStatus.ASSIGNED_DELIVERY
+            status = OrderStatus.ASSIGNED_DELIVERY,
+            bartanDescription = finalBartanDesc,
+            isBartanPending = hasContainers
         )
-        val order = dao.getOrderById(orderId)
+
+        if (hasContainers) {
+            dao.incrementDeliveryBoyBartanCount(boy.id, if (totalContainers > 0) totalContainers else 1)
+
+            val existingRecord = dao.getBartanRecordByOrderId(orderId)
+            val record = existingRecord?.copy(
+                deliveryBoyId = boy.id,
+                deliveryBoyName = boy.name,
+                deliveryBoyMobile = boy.mobile,
+                itemsDescription = finalBartanDesc,
+                handiCount = if (handiCount > 0) handiCount else existingRecord.handiCount,
+                spoonsCount = if (spoonsCount > 0) spoonsCount else existingRecord.spoonsCount,
+                boxesCount = if (boxesCount > 0) boxesCount else existingRecord.boxesCount,
+                returnStatus = "WITH_DELIVERY_BOY",
+                isCollected = false
+            ) ?: BartanRecordEntity(
+                id = "b_${System.currentTimeMillis()}_${orderId}",
+                orderId = orderId,
+                customerName = order?.customerName ?: "Customer",
+                customerMobile = order?.customerMobile ?: "",
+                customerAddress = order?.deliveryAddress ?: "",
+                catererId = order?.catererId ?: boy.kitchenId,
+                catererName = order?.catererName ?: "Kitchen",
+                itemsDescription = finalBartanDesc,
+                deliveryDate = order?.deliveryDate ?: "",
+                deliveryBoyId = boy.id,
+                deliveryBoyName = boy.name,
+                deliveryBoyMobile = boy.mobile,
+                isCollected = false,
+                returnStatus = "WITH_DELIVERY_BOY",
+                handiCount = if (handiCount > 0) handiCount else 2,
+                spoonsCount = if (spoonsCount > 0) spoonsCount else 2,
+                boxesCount = if (boxesCount > 0) boxesCount else 1
+            )
+            dao.insertBartanRecord(record)
+        }
+
+        val containerNote = if (hasContainers) " 🍲 Containers: $finalBartanDesc" else " (Disposable Packaging)"
         val title = "Delivery Partner Assigned 🚴"
-        val message = "Driver ${boy.name} (${boy.mobile}) assigned to order #${orderId}."
+        val message = "Driver ${boy.name} (${boy.mobile}) assigned to order #${orderId}.$containerNote"
 
         dao.insertNotification(
             NotificationEntity(
@@ -787,7 +985,7 @@ class CaterersRepository(private val dao: CaterersDao) {
             NotificationEntity(
                 id = "n_${System.currentTimeMillis()}_delboy",
                 title = "New Delivery Task Assigned 📦",
-                message = "You have been assigned order #${orderId} for delivery to ${order?.customerName ?: "Customer"}.",
+                message = "Order #${orderId} assigned for ${order?.customerName ?: "Customer"}.$containerNote. Please verify kitchen handover.",
                 targetRole = UserRole.DELIVERY_BOY
             )
         )
@@ -1031,6 +1229,46 @@ class CaterersRepository(private val dao: CaterersDao) {
 
     fun getBartanRecordsByDeliveryBoy(deliveryBoyId: String): Flow<List<BartanRecordEntity>> {
         return dao.getBartanRecordsByDeliveryBoy(deliveryBoyId)
+    }
+
+    suspend fun reassignBartanPickupBoy(
+        recordId: String,
+        newBoyId: String,
+        newBoyName: String,
+        newBoyMobile: String,
+        context: Context? = null
+    ) {
+        dao.updateBartanPickupBoy(
+            id = recordId,
+            pickupBoyId = newBoyId,
+            pickupBoyName = newBoyName,
+            pickupBoyMobile = newBoyMobile,
+            status = "PICKUP_SCHEDULED"
+        )
+        val notif = NotificationEntity(
+            id = "n_pickup_${recordId}_${System.currentTimeMillis()}",
+            title = "🔄 Bartan Pickup Re-assigned",
+            message = "Pickup assigned to $newBoyName ($newBoyMobile) for empty containers return to kitchen.",
+            targetRole = UserRole.DELIVERY_BOY
+        )
+        dao.insertNotification(notif)
+    }
+
+    // Kitchen Utensils Master (Stock Hisaab)
+    fun getUtensilsByKitchen(kitchenId: String = "caterer_1"): Flow<List<KitchenUtensilEntity>> {
+        return dao.getUtensilsByKitchen(kitchenId)
+    }
+
+    suspend fun saveUtensil(utensil: KitchenUtensilEntity) {
+        dao.insertUtensil(utensil)
+    }
+
+    suspend fun updateUtensil(utensil: KitchenUtensilEntity) {
+        dao.updateUtensil(utensil)
+    }
+
+    suspend fun deleteUtensil(id: String) {
+        dao.deleteUtensil(id)
     }
 
     /**

@@ -87,6 +87,7 @@ class FirestoreConfigRepository(private val context: Context? = null) {
             "minimumOrderValue" to config.minimumOrderValue,
             "defaultAdvancePercentage" to config.defaultAdvancePercentage,
             "gstTaxPercentage" to config.gstTaxPercentage,
+            "isDeliveryChargeEnabled" to config.isDeliveryChargeEnabled,
             "deliveryRadiusKm" to config.deliveryRadiusKm,
             "deliveryChargePerKm" to config.deliveryChargePerKm,
             "openingTime" to config.openingTime,
@@ -111,6 +112,7 @@ class FirestoreConfigRepository(private val context: Context? = null) {
             "loyaltyPointRupeeValue" to config.loyaltyPointRupeeValue,
             "maxLoyaltyRedeemPercent" to config.maxLoyaltyRedeemPercent,
             "offersAddonServices" to config.offersAddonServices,
+            "isOrderSoundAlertEnabled" to config.isOrderSoundAlertEnabled,
             "lastUpdatedTimestamp" to System.currentTimeMillis()
         )
 
@@ -135,8 +137,9 @@ class FirestoreConfigRepository(private val context: Context? = null) {
                 minimumOrderValue = (data["minimumOrderValue"] as? Number)?.toDouble() ?: 500.0,
                 defaultAdvancePercentage = (data["defaultAdvancePercentage"] as? Number)?.toInt() ?: 30,
                 gstTaxPercentage = (data["gstTaxPercentage"] as? Number)?.toDouble() ?: 5.0,
+                isDeliveryChargeEnabled = data["isDeliveryChargeEnabled"] as? Boolean ?: false,
                 deliveryRadiusKm = (data["deliveryRadiusKm"] as? Number)?.toInt() ?: 25,
-                deliveryChargePerKm = (data["deliveryChargePerKm"] as? Number)?.toDouble() ?: 15.0,
+                deliveryChargePerKm = (data["deliveryChargePerKm"] as? Number)?.toDouble() ?: 0.0,
                 openingTime = data["openingTime"] as? String ?: "07:00 AM",
                 closingTime = data["closingTime"] as? String ?: "11:00 PM",
                 kitchenAddress = data["kitchenAddress"] as? String ?: "Okhla Phase 3, Jamia Nagar, New Delhi - 110025",
@@ -165,7 +168,8 @@ class FirestoreConfigRepository(private val context: Context? = null) {
                 loyaltyEarnPointsPer100Rs = (data["loyaltyEarnPointsPer100Rs"] as? Number)?.toInt() ?: 2,
                 loyaltyPointRupeeValue = (data["loyaltyPointRupeeValue"] as? Number)?.toDouble() ?: 1.0,
                 maxLoyaltyRedeemPercent = (data["maxLoyaltyRedeemPercent"] as? Number)?.toInt() ?: 20,
-                offersAddonServices = data["offersAddonServices"] as? Boolean ?: true
+                offersAddonServices = data["offersAddonServices"] as? Boolean ?: true,
+                isOrderSoundAlertEnabled = data["isOrderSoundAlertEnabled"] as? Boolean ?: true
             )
         } catch (e: Exception) {
             Log.e(tag, "Error parsing Firestore document: ${e.message}")

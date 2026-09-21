@@ -5,11 +5,20 @@ import android.content.Context
 import android.util.Log
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
+import java.util.Locale
+import java.util.TimeZone
 
 class CaterersApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // Ensure India Standard Time (IST - Asia/Kolkata) across the entire application
+        try {
+            val ist = TimeZone.getTimeZone("Asia/Kolkata")
+            TimeZone.setDefault(ist)
+            Locale.setDefault(Locale("en", "IN"))
+        } catch (_: Exception) {}
+
         initFirebase(this)
         com.example.util.FcmNotificationManager.initialize(this)
     }
