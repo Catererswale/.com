@@ -69,6 +69,9 @@ import com.example.ui.theme.AmberSecondary
 import com.example.ui.theme.SaffronPrimary
 import com.example.ui.theme.VegGreen
 
+import androidx.compose.material3.ScrollableTabRow
+import androidx.compose.ui.text.style.TextOverflow
+
 @Composable
 fun DeliveryMainContainer(
     viewModel: CaterersViewModel,
@@ -84,27 +87,44 @@ fun DeliveryMainContainer(
     Column(modifier = modifier.fillMaxSize()) {
         // Header
         Surface(color = Color(0xFF1E293B), contentColor = Color.White) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(14.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Box(
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(36.dp)
                                 .background(SaffronPrimary, CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.DeliveryDining, contentDescription = null, tint = Color.White)
+                            Icon(Icons.Default.DeliveryDining, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                         }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text("Ramesh Sharma (Delivery Partner)", fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                            Text("Aadhaar Verified ✅ | A1 Huma Kitchen", fontSize = 11.sp, color = AmberSecondary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Ramesh Sharma (Delivery)",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                "Aadhaar Verified ✅ | A1 Huma Kitchen",
+                                fontSize = 10.5.sp,
+                                color = AmberSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
+
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(if (isOnlineDuty) "ONLINE" else "OFFLINE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (isOnlineDuty) VegGreen else Color.Red)
@@ -118,18 +138,26 @@ fun DeliveryMainContainer(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-                TabRow(
+                ScrollableTabRow(
                     selectedTabIndex = selectedTab,
                     containerColor = Color.Transparent,
-                    contentColor = Color.White
+                    contentColor = Color.White,
+                    edgePadding = 4.dp
                 ) {
                     tabs.forEachIndexed { index, title ->
                         Tab(
                             selected = selectedTab == index,
                             onClick = { selectedTab = index },
-                            text = { Text(title, style = MaterialTheme.typography.labelLarge, fontSize = 12.sp, fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Medium) },
+                            text = {
+                                Text(
+                                    title,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Medium
+                                )
+                            },
                             modifier = Modifier.testTag("delivery_tab_$index")
                         )
                     }
@@ -460,6 +488,7 @@ fun DeliveryBartanReturnScreen(viewModel: CaterersViewModel) {
     val context = androidx.compose.ui.platform.LocalContext.current
 
     var filterSelection by remember { mutableStateOf("ALL") } // ALL, PENDING, RETURNED
+    var tokenRecordToShow by remember { mutableStateOf<com.example.data.models.BartanRecordEntity?>(null) }
 
     val pendingList = bartanList.filter { !it.isCollected }
     val returnedList = bartanList.filter { it.isCollected }
@@ -644,50 +673,191 @@ fun DeliveryBartanReturnScreen(viewModel: CaterersViewModel) {
                     Spacer(modifier = Modifier.height(10.dp))
 
                     if (!record.isCollected) {
+                        val isHandedOver = record.returnStatus == "HANDED_OVER_AT_COUNTER"
                         Surface(
-                            color = Color(0xFFFEF3C7),
-                            shape = RoundedCornerShape(8.dp),
-                            border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                            color = if (isHandedOver) Color(0xFFEFF6FF) else Color(0xFFFEF3C7),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, if (isHandedOver) Color(0xFFBFDBFE) else Color(0xFFFDE68A)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
+                            Column(modifier = Modifier.padding(12.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("🔒", fontSize = 14.sp)
+                                    Text(if (isHandedOver) "📢" else "🔒", fontSize = 15.sp)
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        "Kitchen Verification Pending (किचन में जमा होना बाकी)",
+                                        if (isHandedOver) "Handover Notification Sent! (किचन को सूचित किया गया)"
+                                        else "Kitchen Counter Verification (किचन में जमा होना बाकी)",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 11.5.sp,
-                                        color = Color(0xFF92400E)
+                                        color = if (isHandedOver) Color(0xFF1E40AF) else Color(0xFF92400E)
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(3.dp))
+                                Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    "Sirf Kitchen Manager/Cashier hi confirm karega ki Handi/Bartan mil gaya hai. Delivery boy ise mark nahi kar sakta. Bartan kitchen counter par laakar jama karein.",
+                                    if (isHandedOver) "Notification kitchen counter ko mil chuki hai! Kitchen staff bina kisi code ke yahin par live jaanch karke accept karega."
+                                    else "Bartan counter par lakar jama karein. Kisi code ki zaroorat nahi hai - seedhe 'Handover' par click karein aur kitchen ko turant notification mil jayegi!",
                                     fontSize = 10.5.sp,
-                                    color = Color(0xFF78350F),
+                                    color = if (isHandedOver) Color(0xFF1E3A8A) else Color(0xFF78350F),
                                     lineHeight = 14.sp
                                 )
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Button(
+                                    onClick = {
+                                        val handis = if (record.handiCount > 0) record.handiCount else 2
+                                        val spoons = if (record.spoonsCount > 0) record.spoonsCount else 2
+                                        val boxes = if (record.boxesCount > 0) record.boxesCount else 1
+                                        val boyId = record.deliveryBoyId.ifBlank { "del_1" }
+                                        val boyName = record.deliveryBoyName.ifBlank { "Ramesh Sharma (Delivery Partner)" }
+                                        viewModel.notifyBartanHandoverToKitchen(
+                                            orderId = record.orderId,
+                                            deliveryBoyId = boyId,
+                                            deliveryBoyName = boyName,
+                                            handis = handis,
+                                            spoons = spoons,
+                                            boxes = boxes
+                                        )
+                                    },
+                                    modifier = Modifier.fillMaxWidth().testTag("delivery_boy_handover_btn_${record.orderId}"),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (isHandedOver) Color(0xFF2563EB) else Color(0xFFD97706)
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.SoupKitchen, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        if (isHandedOver) "🔔 Handover Alert Sent (Dobara Alert Bhejein)"
+                                        else "🍲 Handover Karein (Kitchen Ko Alert Bhejein)",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
                             }
                         }
                     } else {
+                        val isPartial = record.returnStatus == "RETURNED_PARTIAL"
                         Surface(
-                            color = Color(0xFFF0FDF4),
-                            shape = RoundedCornerShape(6.dp),
+                            color = if (isPartial) Color(0xFFFFFBEB) else Color(0xFFF0FDF4),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, if (isPartial) Color(0xFFFDE68A) else Color(0xFFBBF7D0)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Row(
-                                modifier = Modifier.padding(8.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("✅ Handi/Bartan verified & received by Kitchen", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = VegGreen)
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(if (isPartial) "⚠️" else "✅", fontSize = 15.sp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        if (isPartial) "Partial Bartan Verified (अधूरा रिटर्न)"
+                                        else "Full Bartan Verified & Received by Kitchen (पूर्ण वापसी)",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isPartial) Color(0xFFB45309) else VegGreen
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    "🍲 Verified Received: ${record.returnedHandiCount} Handis, ${record.returnedSpoonsCount} Spoons, ${record.returnedBoxesCount} Boxes",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF1E293B)
+                                )
+                                if (record.verifiedByStaffName.isNotBlank()) {
+                                    Text(
+                                        "👤 Verified by: ${record.verifiedByStaffName} ${if (record.verifiedAtTime.isNotBlank()) "at ${record.verifiedAtTime}" else ""}",
+                                        fontSize = 10.sp,
+                                        color = Color.Gray
+                                    )
+                                }
+                                if (record.missingRemarks.isNotBlank()) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        "📝 Kitchen Note: ${record.missingRemarks}",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFDC2626)
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    // Modal dialog displaying Handover QR / Token to show at kitchen counter
+    if (tokenRecordToShow != null) {
+        val rec = tokenRecordToShow!!
+        AlertDialog(
+            onDismissRequest = { tokenRecordToShow = null },
+            icon = {
+                Surface(
+                    color = AmberSecondary.copy(alpha = 0.15f),
+                    shape = CircleShape,
+                    modifier = Modifier.size(54.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(Icons.Default.SoupKitchen, contentDescription = null, tint = AmberSecondary, modifier = Modifier.size(28.dp))
+                    }
+                }
+            },
+            title = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    Text("Kitchen Bartan Handover Token", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("Order #${rec.orderId}", fontSize = 12.sp, color = Color.Gray)
+                }
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Surface(
+                        color = Color(0xFFF8FAFC),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("HANDOVER CODE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                            Text(
+                                "TOK-${rec.orderId.takeLast(4)}-RET",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFF0F172A),
+                                letterSpacing = 2.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text("Containers to handover at counter:", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF334155))
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("• 🍲 Metal Handi: ${if (rec.handiCount > 0) rec.handiCount else 2} Pcs", fontSize = 11.sp, color = Color(0xFF475569))
+                    Text("• 🥄 Serving Spoons: ${if (rec.spoonsCount > 0) rec.spoonsCount else 2} Pcs", fontSize = 11.sp, color = Color(0xFF475569))
+                    Text("• 📦 Boxes / Crates: ${if (rec.boxesCount > 0) rec.boxesCount else 1} Pcs", fontSize = 11.sp, color = Color(0xFF475569))
+
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        "ℹ️ Please handover these items to Halwai / Kitchen supervisor. They will physically count and mark verification.",
+                        fontSize = 10.5.sp,
+                        color = Color(0xFF92400E),
+                        lineHeight = 14.sp
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { tokenRecordToShow = null },
+                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Done (ठीक है)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        )
     }
 }
 
@@ -930,6 +1100,15 @@ fun DeliveryCashCollectionScreen(viewModel: CaterersViewModel) {
                                 fontSize = 10.sp,
                                 color = if (isSubmitted) VegGreen else Color(0xFF991B1B)
                             )
+                            if (isSubmitted && order.cashReceivedByStaffName.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    "💵 Received by: ${order.cashReceivedByStaffName} ${if (order.cashReceivedAtTime.isNotBlank()) "at ${order.cashReceivedAtTime}" else ""}",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = VegGreen
+                                )
+                            }
                         }
                     }
 

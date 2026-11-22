@@ -16,8 +16,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -50,6 +53,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Divider
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -77,26 +81,34 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.models.KitchenStaffMember
+import com.example.data.models.KitchenStaffRole
 import com.example.data.models.UserProfile
 import com.example.data.models.UserRole
 import com.example.ui.theme.AmberSecondary
 import com.example.ui.theme.SaffronPrimary
+import com.example.ui.theme.VegGreen
 
 @Composable
 fun AuthScreen(
+    initialRole: UserRole = UserRole.CUSTOMER,
+    isStandaloneRole: Boolean = false,
     onLoginSuccess: (UserProfile) -> Unit,
     onQuickDemoLogin: (UserRole) -> Unit,
+    onQuickKitchenStaffLogin: ((KitchenStaffMember) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()
 
-    var selectedRole by remember { mutableStateOf(UserRole.CUSTOMER) }
+    var selectedRole by remember(initialRole) { mutableStateOf(initialRole) }
     var isSignUpMode by remember { mutableStateOf(false) }
 
     // Form fields
@@ -118,6 +130,17 @@ fun AuthScreen(
     var otpInput by remember { mutableStateOf("") }
     var generatedOtp by remember { mutableStateOf("7291") }
     var resendCountdown by remember { mutableStateOf(0) }
+
+    val defaultKitchenStaffList = remember {
+        listOf(
+            KitchenStaffMember("stf_2", "Mohd Salim", KitchenStaffRole.STORE_INCHARGE, "2222", "+91 98111 22332"),
+            KitchenStaffMember("stf_3", "Arif Sheikh", KitchenStaffRole.CASHIER, "3333", "+91 98111 22333"),
+            KitchenStaffMember("stf_4", "Feroz Khan", KitchenStaffRole.MANAGER, "4444", "+91 98111 22334"),
+            KitchenStaffMember("stf_1", "Ustad Rashid Khan", KitchenStaffRole.HALWAI, "1111", "+91 98111 22331")
+        )
+    }
+    var selectedKitchenStaff by remember { mutableStateOf(defaultKitchenStaffList[0]) }
+    var staffPinInput by remember { mutableStateOf("") }
 
     LaunchedEffect(resendCountdown) {
         if (resendCountdown > 0) {
@@ -148,18 +171,18 @@ fun AuthScreen(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(SaffronPrimary),
-                            contentAlignment = Alignment.Center
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color.White,
+                            shadowElevation = 3.dp,
+                            modifier = Modifier.size(46.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.RestaurantMenu,
-                                contentDescription = "Logo",
-                                tint = Color.White,
-                                modifier = Modifier.size(26.dp)
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_catererswale_mark),
+                                contentDescription = "Catererswale Logo",
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(2.dp)
                             )
                         }
                         Spacer(modifier = Modifier.width(12.dp))
@@ -181,66 +204,117 @@ fun AuthScreen(
             }
 
             Column(modifier = Modifier.padding(16.dp)) {
-                // Role Selector Tabs
-                Text(
-                    text = "Select Portal / रोल चुनें:",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF333333),
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-
-                Card(
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
-                    elevation = CardDefaults.cardElevation(2.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(modifier = Modifier.padding(6.dp)) {
+                if (isStandaloneRole) {
+                    val roleLabel = when (selectedRole) {
+                        UserRole.CUSTOMER -> "🛒 CaterersWale Customer Login"
+                        UserRole.KITCHEN -> "👨‍🍳 CW Kitchen Partner Login"
+                        UserRole.DELIVERY_BOY -> "🚴 CW Delivery Partner Login"
+                        UserRole.SUPER_ADMIN -> "🛡️ CaterersWale Admin Login"
+                    }
+                    val roleSub = when (selectedRole) {
+                        UserRole.CUSTOMER -> "Bulk Food Ordering & Live Caterer Booking"
+                        UserRole.KITCHEN -> "Kitchen Display System, Live Queue & Settlements"
+                        UserRole.DELIVERY_BOY -> "Order Deliveries, Live Route & OTP Completion"
+                        UserRole.SUPER_ADMIN -> "Platform Operations & Master Controls"
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFFFFF3E0),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp)
+                    ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            RoleAuthChip(
-                                label = "Customer\n(ग्राहक)",
-                                icon = Icons.Default.Person,
-                                isSelected = selectedRole == UserRole.CUSTOMER,
-                                onClick = {
-                                    selectedRole = UserRole.CUSTOMER
-                                    isOtpSent = false
+                            Text(
+                                text = when (selectedRole) {
+                                    UserRole.CUSTOMER -> "🛒"
+                                    UserRole.KITCHEN -> "👨‍🍳"
+                                    UserRole.DELIVERY_BOY -> "🚴"
+                                    UserRole.SUPER_ADMIN -> "🛡️"
                                 },
-                                testTag = "auth_role_customer"
+                                fontSize = 28.sp
                             )
-                            RoleAuthChip(
-                                label = "Kitchen\n(रसोई)",
-                                icon = Icons.Default.Kitchen,
-                                isSelected = selectedRole == UserRole.KITCHEN,
-                                onClick = {
-                                    selectedRole = UserRole.KITCHEN
-                                    isOtpSent = false
-                                },
-                                testTag = "auth_role_kitchen"
-                            )
-                            RoleAuthChip(
-                                label = "Delivery\n(डिलीवरी)",
-                                icon = Icons.Default.DeliveryDining,
-                                isSelected = selectedRole == UserRole.DELIVERY_BOY,
-                                onClick = {
-                                    selectedRole = UserRole.DELIVERY_BOY
-                                    isOtpSent = false
-                                },
-                                testTag = "auth_role_delivery"
-                            )
-                            RoleAuthChip(
-                                label = "Admin\n(एडमिन)",
-                                icon = Icons.Default.AdminPanelSettings,
-                                isSelected = selectedRole == UserRole.SUPER_ADMIN,
-                                onClick = {
-                                    selectedRole = UserRole.SUPER_ADMIN
-                                    isOtpSent = false
-                                },
-                                testTag = "auth_role_admin"
-                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = roleLabel,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF2B1B1B)
+                                )
+                                Text(
+                                    text = roleSub,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF555555)
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    // Role Selector Tabs
+                    Text(
+                        text = "Select Portal / रोल चुनें:",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF333333),
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
+                        elevation = CardDefaults.cardElevation(2.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                RoleAuthChip(
+                                    label = "Customer\n(ग्राहक)",
+                                    icon = Icons.Default.Person,
+                                    isSelected = selectedRole == UserRole.CUSTOMER,
+                                    onClick = {
+                                        selectedRole = UserRole.CUSTOMER
+                                        isOtpSent = false
+                                    },
+                                    testTag = "auth_role_customer"
+                                )
+                                RoleAuthChip(
+                                    label = "Kitchen\n(रसोई)",
+                                    icon = Icons.Default.Kitchen,
+                                    isSelected = selectedRole == UserRole.KITCHEN,
+                                    onClick = {
+                                        selectedRole = UserRole.KITCHEN
+                                        isOtpSent = false
+                                    },
+                                    testTag = "auth_role_kitchen"
+                                )
+                                RoleAuthChip(
+                                    label = "Delivery\n(डिलीवरी)",
+                                    icon = Icons.Default.DeliveryDining,
+                                    isSelected = selectedRole == UserRole.DELIVERY_BOY,
+                                    onClick = {
+                                        selectedRole = UserRole.DELIVERY_BOY
+                                        isOtpSent = false
+                                    },
+                                    testTag = "auth_role_delivery"
+                                )
+                                RoleAuthChip(
+                                    label = "Admin\n(एडमिन)",
+                                    icon = Icons.Default.AdminPanelSettings,
+                                    isSelected = selectedRole == UserRole.SUPER_ADMIN,
+                                    onClick = {
+                                        selectedRole = UserRole.SUPER_ADMIN
+                                        isOtpSent = false
+                                    },
+                                    testTag = "auth_role_admin"
+                                )
+                            }
                         }
                     }
                 }
@@ -316,6 +390,114 @@ fun AuthScreen(
                         Spacer(modifier = Modifier.height(14.dp))
 
                         if (!isSignUpMode) {
+                            if (selectedRole == UserRole.KITCHEN) {
+                                Surface(
+                                    color = Color(0xFFFFFBEB),
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                                    modifier = Modifier.fillMaxWidth().testTag("kitchen_role_auth_section")
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text("👨‍🍳", fontSize = 18.sp)
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Column {
+                                                Text(
+                                                    "Kitchen Staff Role Login (पद अनुसार लॉगिन)",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 13.sp,
+                                                    color = Color(0xFF92400E)
+                                                )
+                                                Text(
+                                                    "बर्तन सत्यापन व पेमेंट लेने वाले का नाम ऑडिट में दर्ज होगा",
+                                                    fontSize = 10.5.sp,
+                                                    color = Color(0xFFB45309)
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(10.dp))
+
+                                        defaultKitchenStaffList.forEach { staff ->
+                                            val isSelected = selectedKitchenStaff.id == staff.id
+                                            Surface(
+                                                color = if (isSelected) Color.White else Color(0xFFFEF3C7).copy(alpha = 0.5f),
+                                                shape = RoundedCornerShape(8.dp),
+                                                border = BorderStroke(
+                                                    if (isSelected) 2.dp else 1.dp,
+                                                    if (isSelected) SaffronPrimary else Color(0xFFFDE68A)
+                                                ),
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 3.dp)
+                                                    .clickable { selectedKitchenStaff = staff }
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                                        Text(staff.roleBadge.take(2), fontSize = 16.sp)
+                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                        Column {
+                                                            Text(staff.name, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color(0xFF1E293B))
+                                                            Text(
+                                                                staff.roleTitle,
+                                                                fontSize = 10.5.sp,
+                                                                color = if (isSelected) SaffronPrimary else Color.Gray,
+                                                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                                                            )
+                                                        }
+                                                    }
+                                                    RadioButton(
+                                                        selected = isSelected,
+                                                        onClick = { selectedKitchenStaff = staff },
+                                                        colors = RadioButtonDefaults.colors(selectedColor = SaffronPrimary)
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(8.dp))
+
+                                        Button(
+                                            onClick = {
+                                                onQuickKitchenStaffLogin?.invoke(selectedKitchenStaff) ?: run {
+                                                    val profile = UserProfile(
+                                                        id = selectedKitchenStaff.id,
+                                                        name = "${selectedKitchenStaff.name} (${selectedKitchenStaff.roleTitle})",
+                                                        mobile = selectedKitchenStaff.mobile,
+                                                        email = "kitchen@caterers.com",
+                                                        role = UserRole.KITCHEN,
+                                                        businessName = "A1 Huma Central Kitchen",
+                                                        city = "New Delhi",
+                                                        fssaiOrLicense = "23319008000123"
+                                                    )
+                                                    onLoginSuccess(profile)
+                                                }
+                                            },
+                                            colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.fillMaxWidth().height(42.dp).testTag("login_kitchen_staff_btn")
+                                        ) {
+                                            Text("${selectedKitchenStaff.name} [${selectedKitchenStaff.roleBadge}] लॉगिन करें 🚀", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(14.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    HorizontalDivider(modifier = Modifier.weight(1f), color = Color(0xFFE2E8F0))
+                                    Text("  या मोबाइल / पासवर्ड से  ", fontSize = 10.5.sp, color = Color.Gray)
+                                    HorizontalDivider(modifier = Modifier.weight(1f), color = Color(0xFFE2E8F0))
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                            }
+
                             // --- SUB-TOGGLE: MOBILE OTP vs PASSWORD ---
                             Row(
                                 modifier = Modifier
@@ -848,6 +1030,50 @@ fun AuthScreen(
                                 modifier = Modifier.weight(1f).height(38.dp).testTag("demo_kitchen_login")
                             ) {
                                 Text("👨‍🍳 Kitchen", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // Kitchen Role Direct Testing shortcuts
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Surface(
+                                color = Color(0xFFFEF3C7),
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { onQuickKitchenStaffLogin?.invoke(defaultKitchenStaffList[0]) }
+                                    .testTag("demo_kitchen_store_btn")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("🍲 Store Incharge (बर्तन)", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF92400E))
+                                }
+                            }
+
+                            Surface(
+                                color = Color(0xFFDCFCE7),
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, Color(0xFFBBF7D0)),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { onQuickKitchenStaffLogin?.invoke(defaultKitchenStaffList[1]) }
+                                    .testTag("demo_kitchen_cashier_btn")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("💵 Cashier (कैश)", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = VegGreen)
+                                }
                             }
                         }
 

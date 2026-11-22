@@ -54,6 +54,7 @@ import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Refresh
@@ -469,7 +470,7 @@ private fun LiveAnimatedGpsMapCard(
         OrderStatus.ASSIGNED_DELIVERY -> 0.60f
         OrderStatus.OUT_FOR_DELIVERY -> 0.82f
         OrderStatus.DELIVERED -> 1.0f
-        OrderStatus.CANCELLED -> 0.0f
+        OrderStatus.CANCELLED, OrderStatus.ON_HOLD -> 0.0f
     }
     val animatedProgress by animateFloatAsState(
         targetValue = targetProgress,
@@ -771,6 +772,15 @@ private fun LiveStatusHeroCard(
                 icon = Icons.Default.Warning,
                 iconBg = Color(0xFFEF4444),
                 progress = 0.0f
+            )
+        }
+        OrderStatus.ON_HOLD -> {
+            LiveStatusData(
+                title = "Order On Hold ⏸️ (होल्ड पर रखा गया)",
+                subtitle = "This booking enquiry is on hold pending confirmation. Please contact kitchen.",
+                icon = Icons.Default.Pause,
+                iconBg = Color(0xFFF59E0B),
+                progress = 0.05f
             )
         }
     }

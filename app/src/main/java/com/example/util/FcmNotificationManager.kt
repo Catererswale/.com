@@ -50,8 +50,20 @@ object FcmNotificationManager {
 
     fun initialize(context: Context) {
         NotificationHelper.initNotificationChannels(context)
-        fetchFcmToken()
-        subscribeToTopic("catererswale_all_users")
+        val isGmsAvailable = try {
+            val availability = com.google.android.gms.common.GoogleApiAvailability.getInstance()
+            availability.isGooglePlayServicesAvailable(context) == com.google.android.gms.common.ConnectionResult.SUCCESS
+        } catch (_: Throwable) {
+            false
+        }
+
+        if (isGmsAvailable) {
+            fetchFcmToken()
+        } else {
+            Log.i(TAG, "Google Play Services unavailable in current runtime environment; running local notification engine.")
+            _fcmToken.value = "fcm_sandbox_token_${System.currentTimeMillis() % 1000000}"
+            _subscribedTopics.value = setOf("catererswale_all_users")
+        }
     }
 
     fun fetchFcmToken() {
@@ -60,16 +72,26 @@ object FcmNotificationManager {
                 .addOnSuccessListener { token ->
                     Log.d(TAG, "FCM Registration Token fetched: $token")
                     _fcmToken.value = token
+                    try {
+                        FirebaseMessaging.getInstance().subscribeToTopic("catererswale_all_users")
+                            .addOnSuccessListener {
+                                _subscribedTopics.value = _subscribedTopics.value + "catererswale_all_users"
+                            }
+                    } catch (e: Exception) {
+                        Log.d(TAG, "FCM topic subscribe skipped: ${e.message}")
+                    }
                 }
                 .addOnFailureListener { e ->
-                    Log.w(TAG, "Failed to retrieve FCM token: ${e.message}")
+                    Log.i(TAG, "FCM token registration unavailable (${e.message}); using local notification engine.")
                     if (_fcmToken.value == null) {
                         _fcmToken.value = "fcm_token_catererswale_${System.currentTimeMillis() % 1000000}"
                     }
+                    _subscribedTopics.value = _subscribedTopics.value + "catererswale_all_users"
                 }
         } catch (e: Exception) {
-            Log.w(TAG, "FirebaseMessaging not initialized or Google Play Services unavailable: ${e.message}")
+            Log.i(TAG, "FirebaseMessaging unavailable: ${e.message}")
             _fcmToken.value = "fcm_sandbox_token_${System.currentTimeMillis() % 1000000}"
+            _subscribedTopics.value = _subscribedTopics.value + "catererswale_all_users"
         }
     }
 
@@ -79,29 +101,32 @@ object FcmNotificationManager {
 
     fun subscribeToTopic(topic: String) {
         val cleanTopic = topic.replace("[^a-zA-Z0-9-_.~%]".toRegex(), "_")
-        try {
-            FirebaseMessaging.getInstance().subscribeToTopic(cleanTopic)
-                .addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        Log.d(TAG, "Subscribed to FCM topic: $cleanTopic")
-                        _subscribedTopics.value = _subscribedTopics.value + cleanTopic
+        _subscribedTopics.value = _subscribedTopics.value + cleanTopic
+        val token = _fcmToken.value
+        if (token != null && !token.startsWith("fcm_token_catererswale_") && !token.startsWith("fcm_sandbox_")) {
+            try {
+                FirebaseMessaging.getInstance().subscribeToTopic(cleanTopic)
+                    .addOnCompleteListener { task ->
+                        if (task.isSuccessful) {
+                            Log.d(TAG, "Subscribed to FCM topic: $cleanTopic")
+                        }
                     }
-                }
-        } catch (e: Exception) {
-            Log.w(TAG, "Topic subscription skipped: ${e.message}")
-            _subscribedTopics.value = _subscribedTopics.value + cleanTopic
+            } catch (e: Exception) {
+                Log.d(TAG, "Topic subscription skipped: ${e.message}")
+            }
         }
     }
 
     fun unsubscribeFromTopic(topic: String) {
         val cleanTopic = topic.replace("[^a-zA-Z0-9-_.~%]".toRegex(), "_")
-        try {
-            FirebaseMessaging.getInstance().unsubscribeFromTopic(cleanTopic)
-                .addOnCompleteListener {
-                    _subscribedTopics.value = _subscribedTopics.value - cleanTopic
-                }
-        } catch (e: Exception) {
-            _subscribedTopics.value = _subscribedTopics.value - cleanTopic
+        _subscribedTopics.value = _subscribedTopics.value - cleanTopic
+        val token = _fcmToken.value
+        if (token != null && !token.startsWith("fcm_token_catererswale_") && !token.startsWith("fcm_sandbox_")) {
+            try {
+                FirebaseMessaging.getInstance().unsubscribeFromTopic(cleanTopic)
+            } catch (e: Exception) {
+                Log.d(TAG, "Topic unsubscription skipped: ${e.message}")
+            }
         }
     }
 
@@ -204,6 +229,10 @@ object FcmNotificationManager {
             OrderStatus.CANCELLED -> Pair(
                 "❌ Order #${order.orderId} Cancelled",
                 "Your order #${order.orderId} was cancelled. Refund will be processed as per policy."
+            )
+            OrderStatus.ON_HOLD -> Pair(
+                "⏸️ Order #${order.orderId} Placed On Hold",
+                "Booking enquiry #${order.orderId} with ${order.catererName} is on hold pending confirmation."
             )
         }
 

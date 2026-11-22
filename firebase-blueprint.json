@@ -1,0 +1,118 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with favorite caterers and preferences",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "favoriteKitchenIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "favoriteKitchenProfiles": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId"]
+    },
+    "KitchenSettings": {
+      "title": "KitchenSettings",
+      "description": "Catering kitchen configuration, delivery parameters, and time slots",
+      "type": "object",
+      "properties": {
+        "isKitchenOpen": { "type": "boolean" },
+        "autoSendWhatsappInvoice": { "type": "boolean" },
+        "minimumOrderValue": { "type": "number" },
+        "defaultAdvancePercentage": { "type": "number" },
+        "gstTaxPercentage": { "type": "number" },
+        "isDeliveryChargeEnabled": { "type": "boolean" },
+        "deliveryRadiusKm": { "type": "number" },
+        "deliveryChargePerKm": { "type": "number" },
+        "openingTime": { "type": "string" },
+        "closingTime": { "type": "string" },
+        "kitchenAddress": { "type": "string" },
+        "kitchenPhone": { "type": "string" },
+        "deliveryTimeSlots": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "allowSameDayBooking": { "type": "boolean" },
+        "sameDayPrepLeadTimeHours": { "type": "number" },
+        "sameDayDeliveryStartTime": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "WeeklySettlement": {
+      "title": "WeeklySettlement",
+      "description": "Weekly revenue payout settlements for caterer partners",
+      "type": "object",
+      "properties": {
+        "settlementId": { "type": "string" },
+        "catererId": { "type": "string" },
+        "catererName": { "type": "string" },
+        "weekPeriod": { "type": "string" },
+        "totalOrdersCount": { "type": "number" },
+        "totalGrossRevenue": { "type": "number" },
+        "commissionDeducted": { "type": "number" },
+        "netPayoutAmount": { "type": "number" },
+        "status": { "type": "string" },
+        "payoutTransactionRef": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["settlementId", "catererId", "netPayoutAmount"]
+    },
+    "CateringOrder": {
+      "title": "CateringOrder",
+      "description": "Customer catering feast order and live tracking record",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string" },
+        "customerUserId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerMobile": { "type": "string" },
+        "address": { "type": "string" },
+        "catererId": { "type": "string" },
+        "catererName": { "type": "string" },
+        "itemsSummary": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "advanceAmount": { "type": "number" },
+        "balanceAmount": { "type": "number" },
+        "is50PercentAdvance": { "type": "boolean" },
+        "paymentMethod": { "type": "string" },
+        "paymentStatus": { "type": "string" },
+        "orderStatus": { "type": "string" },
+        "deliveryDate": { "type": "string" },
+        "deliveryTimeSlot": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["orderId", "catererId", "totalAmount"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile with favorite caterers and preferences"
+    },
+    "/kitchen_config/{docId}": {
+      "schema": "KitchenSettings",
+      "description": "Global kitchen configuration and settings"
+    },
+    "/weekly_settlements/{settlementId}": {
+      "schema": "WeeklySettlement",
+      "description": "Weekly payout and revenue settlement records"
+    },
+    "/orders/{orderId}": {
+      "schema": "CateringOrder",
+      "description": "Catering bookings and order status tracking"
+    }
+  }
+}

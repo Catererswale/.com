@@ -31,7 +31,8 @@ enum class OrderStatus {
     ASSIGNED_DELIVERY,
     OUT_FOR_DELIVERY,
     DELIVERED,
-    CANCELLED
+    CANCELLED,
+    ON_HOLD
 }
 
 enum class PaymentMethod {
@@ -244,7 +245,39 @@ data class OrderEntity(
     val companyAdsFundAmount: Double = 0.0,
     val isRescheduled: Boolean = false,
     val isNonCancellable: Boolean = false,
-    val prepStartedTimestamp: Long? = null
+    val prepStartedTimestamp: Long? = null,
+    // Kitchen Staff Audit: Who received COD cash payment
+    val cashReceivedByStaffName: String = "",
+    val cashReceivedAtTime: String = ""
+)
+
+enum class KitchenStaffRole(val title: String, val badge: String) {
+    MANAGER("Kitchen Manager / इनचार्ज", "👑 Manager"),
+    STORE_INCHARGE("बर्तन व स्टोर इनचार्ज", "🍲 Store Incharge"),
+    CASHIER("कैशियर / अकाउंटेंट", "💵 Cashier"),
+    HALWAI("Head Halwai / शेफ", "👨‍🍳 Halwai")
+}
+
+data class KitchenStaffMember(
+    val id: String,
+    val name: String,
+    val role: KitchenStaffRole,
+    val pin: String = "1234",
+    val mobile: String = "",
+    val isActive: Boolean = true
+) {
+    val roleTitle: String get() = role.title
+    val roleBadge: String get() = role.badge
+}
+
+data class BartanHandoverAlert(
+    val orderId: String,
+    val deliveryBoyId: String,
+    val deliveryBoyName: String,
+    val handiCount: Int,
+    val spoonsCount: Int,
+    val boxesCount: Int,
+    val timestamp: Long = System.currentTimeMillis()
 )
 
 @Entity(tableName = "delivery_boys")
@@ -288,9 +321,16 @@ data class BartanRecordEntity(
     val pickupBoyName: String = "",
     val pickupBoyMobile: String = "",
     // Categorized utensil quantities for stock subtraction
-    val handiCount: Int = 2,
-    val spoonsCount: Int = 2,
-    val boxesCount: Int = 1
+    val handiCount: Int = 0,
+    val spoonsCount: Int = 0,
+    val boxesCount: Int = 0,
+    // Physical Verification & Condition Tracking
+    val returnedHandiCount: Int = 0,
+    val returnedSpoonsCount: Int = 0,
+    val returnedBoxesCount: Int = 0,
+    val missingRemarks: String = "",
+    val verifiedByStaffName: String = "",
+    val verifiedAtTime: String = ""
 )
 
 @Entity(tableName = "kitchen_utensils_master")

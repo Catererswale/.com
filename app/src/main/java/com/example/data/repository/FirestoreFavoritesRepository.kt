@@ -22,16 +22,8 @@ class FirestoreFavoritesRepository(private val context: Context? = null) {
     private val firestore: FirebaseFirestore? by lazy {
         try {
             context?.let { CaterersApplication.initFirebase(it) }
-            val apps = if (context != null) FirebaseApp.getApps(context) else emptyList()
-            if (apps.isNotEmpty()) {
-                FirebaseFirestore.getInstance()
-            } else {
-                try {
-                    FirebaseFirestore.getInstance()
-                } catch (e: Exception) {
-                    null
-                }
-            }
+            val dbId = context?.getString(com.example.R.string.firestore_database_id) ?: "ai-studio-android-remixcat-71e55ec2-4108-449e-a576-eb80f2bf137b"
+            FirebaseFirestore.getInstance(dbId)
         } catch (e: Exception) {
             Log.w(tag, "FirebaseFirestore unavailable: ${e.message}")
             null
@@ -60,7 +52,7 @@ class FirestoreFavoritesRepository(private val context: Context? = null) {
             registration = db.collection(usersCollection).document(userId)
                 .addSnapshotListener { snapshot, error ->
                     if (error != null) {
-                        Log.e(tag, "Firestore favorites listener error: ${error.message}")
+                        Log.w(tag, "Firestore favorites listener note: ${error.message}")
                         return@addSnapshotListener
                     }
 

@@ -119,9 +119,9 @@ data class ContainerCashSummaryRow(
     val pickupBoyMobile: String = "",
     val pickupBoyId: String = "",
     // Utensil Quantities for Stock Subtraction
-    val handiCount: Int = 2,
-    val spoonsCount: Int = 2,
-    val boxesCount: Int = 1,
+    val handiCount: Int = 0,
+    val spoonsCount: Int = 0,
+    val boxesCount: Int = 0,
     // Container Information
     val hasContainer: Boolean,
     val containerRecordId: String?,
@@ -137,7 +137,15 @@ data class ContainerCashSummaryRow(
     val hasCash: Boolean,
     val cashAmount: Double,
     val isCashSubmitted: Boolean,
-    val rawOrder: OrderEntity?
+    val rawOrder: OrderEntity?,
+    // Physical Return Verification Tracking
+    val returnedHandiCount: Int = 0,
+    val returnedSpoonsCount: Int = 0,
+    val returnedBoxesCount: Int = 0,
+    val missingRemarks: String = "",
+    val verifiedByStaffName: String = "",
+    val verifiedAtTime: String = "",
+    val returnVerificationStatus: String = ""
 )
 
 /**
@@ -190,6 +198,7 @@ fun KitchenPendingContainersCashDashboardScreen(
     // Confirmation dialog states for manual actions
     var containerToMarkReturned by remember { mutableStateOf<ContainerCashSummaryRow?>(null) }
     var cashToMarkReceived by remember { mutableStateOf<ContainerCashSummaryRow?>(null) }
+    val activeStaff by viewModel.activeKitchenStaff.collectAsState()
     var reminderTargetRow by remember { mutableStateOf<ContainerCashSummaryRow?>(null) }
 
     // Click-to-view detailed breakdown for top KPI cards & rows
@@ -204,10 +213,16 @@ fun KitchenPendingContainersCashDashboardScreen(
 
         for (order in allOrders) {
             val matchingBartan = bartanRecords.find { it.orderId == order.orderId }
-            val hasContainer = matchingBartan != null || order.isBartanPending || order.bartanDescription.isNotBlank()
+            val isZeroBartan = order.bartanDescription.contains("0 Bartan", ignoreCase = true) ||
+                    order.bartanDescription.contains("No Bartan", ignoreCase = true) ||
+                    order.bartanDescription.contains("Disposable", ignoreCase = true) ||
+                    order.bartanDescription.contains("कोई बर्तन नहीं", ignoreCase = true)
+            val hasContainer = (matchingBartan != null && (matchingBartan.handiCount > 0 || matchingBartan.spoonsCount > 0 || matchingBartan.boxesCount > 0)) ||
+                    (order.isBartanPending && !isZeroBartan) ||
+                    (order.bartanDescription.isNotBlank() && !isZeroBartan)
             val isContainerCollected = matchingBartan?.isCollected ?: order.isBartanReturned
             val containerDesc = matchingBartan?.itemsDescription?.ifBlank { null }
-                ?: order.bartanDescription.ifBlank { "Authentic Steel Handi" }
+                ?: if (isZeroBartan) "0 Bartan (No Utensils)" else order.bartanDescription.ifBlank { "0 Bartan" }
 
             val daysLate = ContainerOverdueHelper.calculateDaysOverdue(order.deliveryDate)
             val isOverdue = hasContainer && !isContainerCollected && ContainerOverdueHelper.isOverdue(order.deliveryDate, isContainerCollected)
@@ -229,9 +244,9 @@ fun KitchenPendingContainersCashDashboardScreen(
                         pickupBoyName = matchingBartan?.pickupBoyName ?: "",
                         pickupBoyMobile = matchingBartan?.pickupBoyMobile ?: "",
                         pickupBoyId = matchingBartan?.pickupBoyId ?: "",
-                        handiCount = matchingBartan?.handiCount ?: 2,
-                        spoonsCount = matchingBartan?.spoonsCount ?: 2,
-                        boxesCount = matchingBartan?.boxesCount ?: 1,
+                        handiCount = matchingBartan?.handiCount ?: 0,
+                        spoonsCount = matchingBartan?.spoonsCount ?: 0,
+                        boxesCount = matchingBartan?.boxesCount ?: 0,
                         hasContainer = hasContainer,
                         containerRecordId = matchingBartan?.id,
                         containerDescription = containerDesc,
@@ -244,7 +259,14 @@ fun KitchenPendingContainersCashDashboardScreen(
                         hasCash = hasCash,
                         cashAmount = cashAmt,
                         isCashSubmitted = order.isCashSubmittedToKitchen,
-                        rawOrder = order
+                        rawOrder = order,
+                        returnedHandiCount = matchingBartan?.returnedHandiCount ?: 0,
+                        returnedSpoonsCount = matchingBartan?.returnedSpoonsCount ?: 0,
+                        returnedBoxesCount = matchingBartan?.returnedBoxesCount ?: 0,
+                        missingRemarks = matchingBartan?.missingRemarks ?: "",
+                        verifiedByStaffName = matchingBartan?.verifiedByStaffName ?: "",
+                        verifiedAtTime = matchingBartan?.verifiedAtTime ?: "",
+                        returnVerificationStatus = matchingBartan?.returnStatus ?: if (isContainerCollected) "RETURNED_FULL" else "PENDING"
                     )
                 )
                 processedOrderIds.add(order.orderId)
@@ -285,7 +307,14 @@ fun KitchenPendingContainersCashDashboardScreen(
                         hasCash = false,
                         cashAmount = 0.0,
                         isCashSubmitted = true,
-                        rawOrder = null
+                        rawOrder = null,
+                        returnedHandiCount = record.returnedHandiCount,
+                        returnedSpoonsCount = record.returnedSpoonsCount,
+                        returnedBoxesCount = record.returnedBoxesCount,
+                        missingRemarks = record.missingRemarks,
+                        verifiedByStaffName = record.verifiedByStaffName,
+                        verifiedAtTime = record.verifiedAtTime,
+                        returnVerificationStatus = record.returnStatus
                     )
                 )
             }
@@ -354,60 +383,27 @@ fun KitchenPendingContainersCashDashboardScreen(
             .size
     }
 
-    // Modal Confirmation Dialog: Manually Mark Container as Returned
+    // Dedicated Physical Verification Dialog for Utensils returned by Delivery Partner
     if (containerToMarkReturned != null) {
         val row = containerToMarkReturned!!
-        val currentDate = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
-        AlertDialog(
-            onDismissRequest = { containerToMarkReturned = null },
-            icon = { Icon(Icons.Default.SoupKitchen, contentDescription = null, tint = AmberSecondary, modifier = Modifier.size(32.dp)) },
-            title = { Text("Mark Container Returned?", fontWeight = FontWeight.Bold, fontSize = 16.sp) },
-            text = {
-                Column {
-                    Text(
-                        "Kya aap confirm karte hain ki Order #${row.orderId} ka container (${row.containerDescription}) Kitchen me wapas jama ho gaya hai?",
-                        fontSize = 13.5.sp,
-                        lineHeight = 19.sp,
-                        color = Color(0xFF1E293B)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Surface(
-                        color = Color(0xFFFFFBEB),
-                        shape = RoundedCornerShape(8.dp),
-                        border = BorderStroke(1.dp, Color(0xFFFDE68A)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(10.dp)) {
-                            Text("👤 Customer: ${row.customerName} (${row.customerMobile})", fontSize = 11.5.sp, color = Color(0xFF92400E))
-                            Text("🛵 Delivery Boy: ${row.deliveryBoyName}", fontSize = 11.5.sp, color = Color(0xFF92400E))
-                            Text("🍲 Utensils: ${row.containerDescription}", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF78350F))
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val recordId = row.containerRecordId ?: row.orderId
-                        viewModel.markBartanCollected(recordId, currentDate)
-                        containerToMarkReturned = null
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = VegGreen),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.testTag("confirm_mark_returned_btn")
-                ) {
-                    Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Haan, Mark Returned", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                OutlinedButton(
-                    onClick = { containerToMarkReturned = null },
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Text("Cancel", fontSize = 12.sp)
-                }
+        val activeStaffTitle = "${activeStaff.name} (${activeStaff.roleTitle})"
+        DeliveryBoyBartanReturnVerificationDialog(
+            row = row,
+            currentStaffName = activeStaffTitle,
+            onDismiss = { containerToMarkReturned = null },
+            onConfirmVerification = { recordId, orderId, boyId, retHandis, retSpoons, retBoxes, remarks, staffName ->
+                viewModel.verifyAndCompleteBartanReturn(
+                    recordId = recordId,
+                    orderId = orderId,
+                    deliveryBoyId = boyId,
+                    kitchenId = "caterer_1",
+                    returnedHandis = retHandis,
+                    returnedSpoons = retSpoons,
+                    returnedBoxes = retBoxes,
+                    missingRemarks = remarks,
+                    staffName = staffName
+                )
+                containerToMarkReturned = null
             }
         )
     }
@@ -415,6 +411,7 @@ fun KitchenPendingContainersCashDashboardScreen(
     // Modal Confirmation Dialog: Manually Mark Cash as Received
     if (cashToMarkReceived != null) {
         val row = cashToMarkReceived!!
+        val activeStaffTitle = "${activeStaff.name} (${activeStaff.roleTitle})"
         AlertDialog(
             onDismissRequest = { cashToMarkReceived = null },
             icon = { Icon(Icons.Default.AttachMoney, contentDescription = null, tint = VegGreen, modifier = Modifier.size(32.dp)) },
@@ -438,9 +435,10 @@ fun KitchenPendingContainersCashDashboardScreen(
                             Text("💵 Amount: ₹${row.cashAmount.toInt()} (50% COD)", fontWeight = FontWeight.Black, fontSize = 14.sp, color = VegGreen)
                             Text("👤 Customer: ${row.customerName} (${row.customerMobile})", fontSize = 11.5.sp, color = Color(0xFF166534))
                             Text("🛵 Handed over by: ${row.deliveryBoyName}", fontSize = 11.5.sp, color = Color(0xFF166534))
+                            Text("👨‍🍳 Cashier / Staff: $activeStaffTitle", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF15803D))
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                "Kitchen confirm karne ke baad status turant 'Fully Settled' update ho jayega.",
+                                "Kitchen confirm karne ke baad status turant 'Fully Settled' update ho jayega aur audit me $activeStaffTitle ka naam darj ho jayega.",
                                 fontSize = 10.5.sp,
                                 color = Color.Gray
                             )
@@ -451,7 +449,7 @@ fun KitchenPendingContainersCashDashboardScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.markCashReceivedByKitchen(row.orderId)
+                        viewModel.markCashReceivedByKitchenWithStaff(row.orderId, activeStaffTitle)
                         cashToMarkReceived = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = VegGreen),
@@ -1498,13 +1496,27 @@ private fun TableDataRow(
                         overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(3.dp))
-                    if (row.isContainerCollected) {
+                    if (row.returnVerificationStatus == "RETURNED_PARTIAL") {
+                        Surface(
+                            color = Color(0xFFFFFBEB),
+                            shape = RoundedCornerShape(4.dp),
+                            border = BorderStroke(1.dp, Color(0xFFFDE68A))
+                        ) {
+                            Text(
+                                "⚠️ PARTIAL RETURN",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFB45309),
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            )
+                        }
+                    } else if (row.isContainerCollected || row.returnVerificationStatus == "RETURNED_FULL") {
                         Surface(
                             color = Color(0xFFDCFCE7),
                             shape = RoundedCornerShape(4.dp)
                         ) {
                             Text(
-                                "✅ RETURNED",
+                                "✅ FULL VERIFIED",
                                 fontSize = 9.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = VegGreen,
@@ -1603,18 +1615,18 @@ private fun TableDataRow(
                     Text("Order Details & Boy", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF2563EB))
                 }
 
-                // Button 1: Mark Container as Returned
-                if (row.hasContainer && !row.isContainerCollected) {
+                // Button 1: Mark / Verify Container as Returned
+                if (row.hasContainer && (!row.isContainerCollected || row.returnVerificationStatus == "RETURNED_PARTIAL")) {
                     Button(
                         onClick = onMarkReturned,
-                        colors = ButtonDefaults.buttonColors(containerColor = VegGreen),
+                        colors = ButtonDefaults.buttonColors(containerColor = if (row.returnVerificationStatus == "RETURNED_PARTIAL") Color(0xFFD97706) else VegGreen),
                         shape = RoundedCornerShape(6.dp),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 3.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("mark_returned_${row.orderId}")
                     ) {
-                        Text("🍲 Mark Returned", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                        Text(if (row.returnVerificationStatus == "RETURNED_PARTIAL") "🍲 Verify Remaining" else "🍲 Verify Return (जांचें)", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
                     }
 
                     // Button 1A: Re-assign Pickup Boy
@@ -1837,11 +1849,12 @@ private fun SummaryCardItem(
                         } else {
                             Text(
                                 if (!row.hasContainer) "No utensils"
-                                else if (row.isContainerCollected) "✅ Returned to Kitchen"
+                                else if (row.returnVerificationStatus == "RETURNED_PARTIAL") "⚠️ Partial Return (${row.returnedHandiCount + row.returnedSpoonsCount + row.returnedBoxesCount} recvd)"
+                                else if (row.isContainerCollected || row.returnVerificationStatus == "RETURNED_FULL") "✅ Full Verified Return"
                                 else "⏳ Customer ke paas",
                                 fontSize = 9.5.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = if (!row.hasContainer || row.isContainerCollected) VegGreen else AmberSecondary
+                                color = if (row.returnVerificationStatus == "RETURNED_PARTIAL") Color(0xFFD97706) else if (!row.hasContainer || row.isContainerCollected) VegGreen else AmberSecondary
                             )
                         }
                     }
@@ -1931,15 +1944,15 @@ private fun SummaryCardItem(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (row.hasContainer && !row.isContainerCollected) {
+                    if (row.hasContainer && (!row.isContainerCollected || row.returnVerificationStatus == "RETURNED_PARTIAL")) {
                         Button(
                             onClick = onMarkReturned,
                             modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = VegGreen),
+                            colors = ButtonDefaults.buttonColors(containerColor = if (row.returnVerificationStatus == "RETURNED_PARTIAL") Color(0xFFD97706) else VegGreen),
                             shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                         ) {
-                            Text("🍲 Mark Returned", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text(if (row.returnVerificationStatus == "RETURNED_PARTIAL") "🍲 Verify Remaining" else "🍲 Verify Return (जांचें)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -2856,15 +2869,15 @@ private fun DetailBreakdownOrderCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (row.hasContainer && !row.isContainerCollected) {
+                    if (row.hasContainer && (!row.isContainerCollected || row.returnVerificationStatus == "RETURNED_PARTIAL")) {
                         Button(
                             onClick = onMarkReturned,
                             modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColors(containerColor = VegGreen),
+                            colors = ButtonDefaults.buttonColors(containerColor = if (row.returnVerificationStatus == "RETURNED_PARTIAL") Color(0xFFD97706) else VegGreen),
                             shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                         ) {
-                            Text("🍲 Mark Handi Returned", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text(if (row.returnVerificationStatus == "RETURNED_PARTIAL") "🍲 Verify Remaining" else "🍲 Verify Bartan Return (जांचें)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 

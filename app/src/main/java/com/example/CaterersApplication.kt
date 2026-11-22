@@ -19,6 +19,13 @@ class CaterersApplication : Application() {
             Locale.setDefault(Locale("en", "IN"))
         } catch (_: Exception) {}
 
+        try {
+            val webViewWasmDir = java.io.File(cacheDir, "WebView/Default/HTTP Cache/Code Cache/wasm")
+            if (!webViewWasmDir.exists()) {
+                webViewWasmDir.mkdirs()
+            }
+        } catch (_: Exception) {}
+
         initFirebase(this)
         com.example.util.FcmNotificationManager.initialize(this)
     }
@@ -35,13 +42,7 @@ class CaterersApplication : Application() {
                         Log.d(TAG, "Auto Firebase init skipped: ${e.message}")
                     }
 
-                    if (FirebaseApp.getApps(context).isEmpty()) {
-                        val options = FirebaseOptions.Builder()
-                            .setApplicationId("1:220178276406:android:catererswale")
-                            .setProjectId("catererswale-aistudio")
-                            .setApiKey("AIzaSyFakeKeyForLocalFallbackInit1234567")
-                            .build()
-                        FirebaseApp.initializeApp(context, options)
+                    if (FirebaseApp.getApps(context).isNotEmpty()) {
                         Log.i(TAG, "FirebaseApp initialized successfully.")
                     }
                 }

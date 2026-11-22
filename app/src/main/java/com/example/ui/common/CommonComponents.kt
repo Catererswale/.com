@@ -8,6 +8,8 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -79,6 +82,8 @@ fun RoleSelectorBar(
     currentUser: UserProfile? = null,
     isLoggedIn: Boolean = false,
     onLogout: () -> Unit = {},
+    isStandaloneMode: Boolean = false,
+    onToggleStandaloneMode: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showLangDialog by remember { mutableStateOf(false) }
@@ -88,7 +93,7 @@ fun RoleSelectorBar(
         contentColor = Color.White,
         modifier = modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(vertical = 6.dp, horizontal = 12.dp)) {
+        Column(modifier = Modifier.statusBarsPadding().padding(vertical = 4.dp, horizontal = 10.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -98,21 +103,22 @@ fun RoleSelectorBar(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             text = "👤 ${currentUser.name}",
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = Color.White,
+                            fontSize = 12.sp
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
                         Surface(
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(8.dp),
                             color = SaffronPrimary
                         ) {
                             Text(
                                 text = LocalizationManager.getRoleBadge(currentRole, currentLanguage),
-                                fontSize = 10.sp,
+                                fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
                             )
                         }
                     }
@@ -120,7 +126,8 @@ fun RoleSelectorBar(
                     Text(
                         text = "Portal Selector:",
                         style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.8f)
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 10.sp
                     )
                 }
 
@@ -128,47 +135,47 @@ fun RoleSelectorBar(
                     if (isLoggedIn) {
                         Surface(
                             onClick = onLogout,
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(10.dp),
                             color = Color(0xFFD32F2F),
                             modifier = Modifier.testTag("topbar_logout_button")
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.ExitToApp,
                                     contentDescription = "Logout",
                                     tint = Color.White,
-                                    modifier = Modifier.size(14.dp)
+                                    modifier = Modifier.size(12.dp)
                                 )
                                 Spacer(modifier = Modifier.width(3.dp))
                                 Text(
                                     text = LocalizationManager.getLogoutText(currentLanguage),
-                                    fontSize = 11.sp,
+                                    fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
                                 )
                             }
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                     }
 
                     IconButton(
                         onClick = { showLangDialog = true },
-                        modifier = Modifier.size(32.dp).testTag("lang_button")
+                        modifier = Modifier.size(26.dp).testTag("lang_button")
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.Language,
                                 contentDescription = "Language",
                                 tint = AmberSecondary,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(2.dp))
                             Text(
                                 text = currentLanguage.name.take(2),
-                                fontSize = 11.sp,
+                                fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = AmberSecondary
                             )
@@ -177,40 +184,79 @@ fun RoleSelectorBar(
                 }
             }
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                RoleChip(
-                    label = LocalizationManager.getRoleLabel(UserRole.CUSTOMER, currentLanguage),
-                    icon = Icons.Default.Person,
-                    isSelected = currentRole == UserRole.CUSTOMER,
-                    onClick = { onRoleSelected(UserRole.CUSTOMER) },
-                    testTag = "role_customer"
-                )
-                RoleChip(
-                    label = LocalizationManager.getRoleLabel(UserRole.KITCHEN, currentLanguage),
-                    icon = Icons.Default.Kitchen,
-                    isSelected = currentRole == UserRole.KITCHEN,
-                    onClick = { onRoleSelected(UserRole.KITCHEN) },
-                    testTag = "role_kitchen"
-                )
-                RoleChip(
-                    label = LocalizationManager.getRoleLabel(UserRole.DELIVERY_BOY, currentLanguage),
-                    icon = Icons.Default.DeliveryDining,
-                    isSelected = currentRole == UserRole.DELIVERY_BOY,
-                    onClick = { onRoleSelected(UserRole.DELIVERY_BOY) },
-                    testTag = "role_delivery"
-                )
-                RoleChip(
-                    label = LocalizationManager.getRoleLabel(UserRole.SUPER_ADMIN, currentLanguage),
-                    icon = Icons.Default.AdminPanelSettings,
-                    isSelected = currentRole == UserRole.SUPER_ADMIN,
-                    onClick = { onRoleSelected(UserRole.SUPER_ADMIN) },
-                    testTag = "role_admin"
-                )
+            if (!isStandaloneMode) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(top = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    RoleChip(
+                        label = LocalizationManager.getRoleLabel(UserRole.CUSTOMER, currentLanguage),
+                        icon = Icons.Default.Person,
+                        isSelected = currentRole == UserRole.CUSTOMER,
+                        onClick = { onRoleSelected(UserRole.CUSTOMER) },
+                        testTag = "role_customer"
+                    )
+                    RoleChip(
+                        label = LocalizationManager.getRoleLabel(UserRole.KITCHEN, currentLanguage),
+                        icon = Icons.Default.Kitchen,
+                        isSelected = currentRole == UserRole.KITCHEN,
+                        onClick = { onRoleSelected(UserRole.KITCHEN) },
+                        testTag = "role_kitchen"
+                    )
+                    RoleChip(
+                        label = LocalizationManager.getRoleLabel(UserRole.DELIVERY_BOY, currentLanguage),
+                        icon = Icons.Default.DeliveryDining,
+                        isSelected = currentRole == UserRole.DELIVERY_BOY,
+                        onClick = { onRoleSelected(UserRole.DELIVERY_BOY) },
+                        testTag = "role_delivery"
+                    )
+                    RoleChip(
+                        label = LocalizationManager.getRoleLabel(UserRole.SUPER_ADMIN, currentLanguage),
+                        icon = Icons.Default.AdminPanelSettings,
+                        isSelected = currentRole == UserRole.SUPER_ADMIN,
+                        onClick = { onRoleSelected(UserRole.SUPER_ADMIN) },
+                        testTag = "role_admin"
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val appLabel = when (currentRole) {
+                        UserRole.CUSTOMER -> "🛒 CaterersWale Customer App"
+                        UserRole.KITCHEN -> "👨‍🍳 CW Kitchen Partner Portal"
+                        UserRole.DELIVERY_BOY -> "🚴 CW Delivery Partner App"
+                        UserRole.SUPER_ADMIN -> "🛡️ CaterersWale Admin Portal"
+                    }
+                    Text(
+                        text = appLabel,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AmberSecondary
+                    )
+
+                    Surface(
+                        onClick = onToggleStandaloneMode,
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.White.copy(alpha = 0.15f),
+                        modifier = Modifier.testTag("toggle_roles_button")
+                    ) {
+                        Text(
+                            text = "All Roles ▾",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
             }
         }
     }
@@ -245,22 +291,23 @@ private fun RoleChip(
         modifier = Modifier.testTag(testTag)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = label,
                 tint = textColor,
-                modifier = Modifier.size(14.dp)
+                modifier = Modifier.size(12.dp)
             )
-            Spacer(modifier = Modifier.width(4.dp))
+            Spacer(modifier = Modifier.width(3.dp))
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelLarge,
-                fontSize = 13.sp,
+                style = MaterialTheme.typography.labelSmall,
+                fontSize = 10.5.sp,
                 color = textColor,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                maxLines = 1
             )
         }
     }
@@ -358,12 +405,22 @@ fun UnitQuantityPicker(
     onQuantityChange: (Double) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val safeMin = minQty.coerceAtLeast(0.1)
+    val safeMax = maxQty.coerceAtLeast(safeMin)
+    val clampedQty = quantity.coerceIn(safeMin, safeMax)
+
     val unitLabel = when (unitType) {
         UnitType.KG -> "Kg"
         UnitType.DOZEN -> "Dozen"
         UnitType.LITRE -> "Litre"
         UnitType.PORTION -> "Portion"
     }
+
+    fun fmt(v: Double): String = if (v % 1.0 == 0.0) v.toInt().toString() else String.format(java.util.Locale.ENGLISH, "%.1f", v)
+
+    val canDecrease = clampedQty - step >= safeMin - 0.001
+    val canIncrease = clampedQty + step <= safeMax + 0.001
 
     Surface(
         shape = RoundedCornerShape(8.dp),
@@ -376,44 +433,64 @@ fun UnitQuantityPicker(
             horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
         ) {
-            IconButton(
-                onClick = {
-                    if (quantity - step >= minQty) {
-                        onQuantityChange(quantity - step)
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .clickable {
+                        if (canDecrease) {
+                            val next = (kotlin.math.round((clampedQty - step) * 100.0) / 100.0).coerceIn(safeMin, safeMax)
+                            onQuantityChange(next)
+                        } else {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Minimum order is ${fmt(safeMin)} $unitLabel (कम से कम ${fmt(safeMin)} $unitLabel)",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
                     }
-                },
-                enabled = quantity > minQty,
-                modifier = Modifier.size(28.dp).testTag("qty_minus")
+                    .testTag("qty_minus"),
+                contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.Remove,
                     contentDescription = "Decrease",
-                    tint = if (quantity > minQty) SaffronPrimary else Color.Gray,
+                    tint = if (canDecrease) SaffronPrimary else Color.LightGray,
                     modifier = Modifier.size(16.dp)
                 )
             }
 
             Text(
-                text = "${if (quantity % 1.0 == 0.0) quantity.toInt() else String.format("%.1f", quantity)} $unitLabel",
-                fontSize = 13.sp,
+                text = "${fmt(clampedQty)} $unitLabel",
+                fontSize = 12.5.sp,
                 fontWeight = FontWeight.Bold,
                 color = SaffronPrimary,
                 modifier = Modifier.padding(horizontal = 6.dp)
             )
 
-            IconButton(
-                onClick = {
-                    if (quantity + step <= maxQty) {
-                        onQuantityChange(quantity + step)
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .clickable {
+                        if (canIncrease) {
+                            val next = (kotlin.math.round((clampedQty + step) * 100.0) / 100.0).coerceIn(safeMin, safeMax)
+                            onQuantityChange(next)
+                        } else {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Maximum order limit is ${fmt(safeMax)} $unitLabel (अधिकतम ${fmt(safeMax)} $unitLabel)",
+                                android.widget.Toast.LENGTH_SHORT
+                            ).show()
+                        }
                     }
-                },
-                enabled = quantity < maxQty,
-                modifier = Modifier.size(28.dp).testTag("qty_plus")
+                    .testTag("qty_plus"),
+                contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
                     contentDescription = "Increase",
-                    tint = if (quantity < maxQty) SaffronPrimary else Color.Gray,
+                    tint = if (canIncrease) SaffronPrimary else Color.LightGray,
                     modifier = Modifier.size(16.dp)
                 )
             }

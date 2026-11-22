@@ -79,37 +79,162 @@ class MainActivity : ComponentActivity() {
             java.util.Locale.setDefault(java.util.Locale("en", "IN"))
         } catch (_: Exception) {}
         enableEdgeToEdge()
+        handleLauncherIntent(intent)
         handleDeepLink(intent)
 
         setContent {
             MyApplicationTheme {
-                CaterersWaleApp(viewModel = viewModel)
+                CaterersWaleApp(viewModel = viewModel, lockedRole = null)
             }
         }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
+        handleLauncherIntent(intent)
         handleDeepLink(intent)
+    }
+
+    private fun handleLauncherIntent(intent: Intent?) {
+        val targetRole = intent?.getStringExtra("TARGET_ROLE")
+            ?: when {
+                intent?.component?.className?.contains("KitchenAppLauncher") == true -> "KITCHEN"
+                intent?.component?.className?.contains("DeliveryAppLauncher") == true -> "DELIVERY_BOY"
+                intent?.component?.className?.contains("AdminAppLauncher") == true -> "ADMIN"
+                intent?.component?.className?.contains("CustomerAppLauncher") == true -> "CUSTOMER"
+                else -> null
+            }
+
+        when (targetRole) {
+            "KITCHEN" -> {
+                viewModel.switchRole(UserRole.KITCHEN)
+                viewModel.setStandaloneRoleMode(true)
+            }
+            "DELIVERY_BOY" -> {
+                viewModel.switchRole(UserRole.DELIVERY_BOY)
+                viewModel.setStandaloneRoleMode(true)
+            }
+            "ADMIN" -> {
+                viewModel.switchRole(UserRole.SUPER_ADMIN)
+                viewModel.setStandaloneRoleMode(true)
+            }
+            "CUSTOMER" -> {
+                viewModel.switchRole(UserRole.CUSTOMER)
+                viewModel.setStandaloneRoleMode(true)
+            }
+        }
     }
 
     private fun handleDeepLink(intent: Intent?) {
         val uri: Uri = intent?.data ?: return
+        val lastSeg = uri.lastPathSegment
         val kitchen = uri.getQueryParameter("kitchen")
             ?: uri.getQueryParameter("kitchenId")
             ?: uri.getQueryParameter("caterer")
-            ?: if (uri.pathSegments.contains("menu") && uri.lastPathSegment != "menu") uri.lastPathSegment else null
+            ?: if (
+                (uri.pathSegments.contains("menu") ||
+                    uri.pathSegments.contains("store") ||
+                    uri.pathSegments.contains("order") ||
+                    uri.pathSegments.contains("kitchen")) &&
+                lastSeg !in listOf("menu", "store", "order", "kitchen", null)
+            ) {
+                lastSeg
+            } else {
+                null
+            }
         if (!kitchen.isNullOrBlank()) {
             viewModel.setDeepLinkedCatererId(kitchen)
         }
     }
 }
 
+/**
+ * Dedicated Standalone Activity for CW Kitchen Partner App.
+ * Guaranteed to ALWAYS open Kitchen Partner Portal and never Customer App.
+ */
+class KitchenAppLauncher : ComponentActivity() {
+    private val viewModel: CaterersViewModel by viewModels()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        try {
+            java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Kolkata"))
+            java.util.Locale.setDefault(java.util.Locale("en", "IN"))
+        } catch (_: Exception) {}
+        enableEdgeToEdge()
+        viewModel.switchRole(UserRole.KITCHEN)
+        viewModel.setStandaloneRoleMode(true)
+
+        setContent {
+            MyApplicationTheme {
+                CaterersWaleApp(viewModel = viewModel, lockedRole = UserRole.KITCHEN)
+            }
+        }
+    }
+}
+
+/**
+ * Dedicated Standalone Activity for CW Delivery Partner App.
+ * Guaranteed to ALWAYS open Delivery Boy Portal and never Customer App.
+ */
+class DeliveryAppLauncher : ComponentActivity() {
+    private val viewModel: CaterersViewModel by viewModels()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        try {
+            java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Kolkata"))
+            java.util.Locale.setDefault(java.util.Locale("en", "IN"))
+        } catch (_: Exception) {}
+        enableEdgeToEdge()
+        viewModel.switchRole(UserRole.DELIVERY_BOY)
+        viewModel.setStandaloneRoleMode(true)
+
+        setContent {
+            MyApplicationTheme {
+                CaterersWaleApp(viewModel = viewModel, lockedRole = UserRole.DELIVERY_BOY)
+            }
+        }
+    }
+}
+
+/**
+ * Dedicated Standalone Activity for CW Super Admin App.
+ * Guaranteed to ALWAYS open Super Admin Control Panel and never Customer App.
+ */
+class AdminAppLauncher : ComponentActivity() {
+    private val viewModel: CaterersViewModel by viewModels()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        try {
+            java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Kolkata"))
+            java.util.Locale.setDefault(java.util.Locale("en", "IN"))
+        } catch (_: Exception) {}
+        enableEdgeToEdge()
+        viewModel.switchRole(UserRole.SUPER_ADMIN)
+        viewModel.setStandaloneRoleMode(true)
+
+        setContent {
+            MyApplicationTheme {
+                CaterersWaleApp(viewModel = viewModel, lockedRole = UserRole.SUPER_ADMIN)
+            }
+        }
+    }
+}
+
 @Composable
-fun CaterersWaleApp(viewModel: CaterersViewModel) {
-    val currentRole by viewModel.currentRole.collectAsState()
+fun CaterersWaleApp(
+    viewModel: CaterersViewModel,
+    lockedRole: UserRole? = null
+) {
+    val vmRole by viewModel.currentRole.collectAsState()
+    val currentRole = lockedRole ?: vmRole
     val currentLanguage by viewModel.currentLanguage.collectAsState()
     val feedbackMessage by viewModel.userFeedbackMessage.collectAsState()
+    val vmStandalone by viewModel.isStandaloneRoleMode.collectAsState()
+    val isStandaloneMode = lockedRole != null || vmStandalone
 
     val isLoggedIn by viewModel.isLoggedIn.collectAsState()
     val currentUser by viewModel.currentUser.collectAsState()
@@ -120,20 +245,25 @@ fun CaterersWaleApp(viewModel: CaterersViewModel) {
     // Customer Navigation States
     var customerScreen by remember { mutableStateOf(CustomerScreen.HOME) }
     var selectedCatererId by remember { mutableStateOf("caterer_1") }
+    var is30PercentAdvance by remember { mutableStateOf(true) }
+    var isExclusiveStoreMode by remember { mutableStateOf(false) }
+    var isPartnerPreviewMode by remember { mutableStateOf(false) }
 
     LaunchedEffect(deepLinkedCatererId) {
         val target = deepLinkedCatererId
         if (!target.isNullOrBlank()) {
+            if (!isLoggedIn) {
+                viewModel.quickDemoLogin(UserRole.CUSTOMER)
+            }
             selectedCatererId = target
+            isExclusiveStoreMode = true
+            isPartnerPreviewMode = false
             viewModel.switchRole(UserRole.CUSTOMER)
             customerScreen = CustomerScreen.CATERER_DETAIL
             viewModel.showFeedback("⚡ Opening Live Kitchen Menu...")
             viewModel.clearDeepLinkedCatererId()
         }
     }
-    var is30PercentAdvance by remember { mutableStateOf(true) }
-    var isExclusiveStoreMode by remember { mutableStateOf(false) }
-    var isPartnerPreviewMode by remember { mutableStateOf(false) }
 
     var selectedDate by remember { mutableStateOf("2026-07-25") }
     var selectedTimeSlot by remember { mutableStateOf("12:30 PM - 01:00 PM") }
@@ -150,19 +280,22 @@ fun CaterersWaleApp(viewModel: CaterersViewModel) {
     var finalOrderDeliveryFee by remember { mutableStateOf(0.0) }
 
     Scaffold(
-        modifier = Modifier
-            .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.safeDrawing),
+        modifier = Modifier.fillMaxSize(),
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
-            RoleSelectorBar(
-                currentRole = currentRole,
-                onRoleSelected = { viewModel.switchRole(it) },
-                currentLanguage = currentLanguage,
-                onLanguageChange = { viewModel.switchLanguage(it) },
-                currentUser = currentUser,
-                isLoggedIn = isLoggedIn,
-                onLogout = { viewModel.logout() }
-            )
+            if (lockedRole == null && !isStandaloneMode) {
+                RoleSelectorBar(
+                    currentRole = currentRole,
+                    onRoleSelected = { viewModel.switchRole(it) },
+                    currentLanguage = currentLanguage,
+                    onLanguageChange = { viewModel.switchLanguage(it) },
+                    currentUser = currentUser,
+                    isLoggedIn = isLoggedIn,
+                    onLogout = { viewModel.logout() },
+                    isStandaloneMode = isStandaloneMode,
+                    onToggleStandaloneMode = { viewModel.toggleStandaloneRoleMode() }
+                )
+            }
         }
     ) { innerPadding ->
         Box(
@@ -172,8 +305,11 @@ fun CaterersWaleApp(viewModel: CaterersViewModel) {
         ) {
             if (!isLoggedIn) {
                 AuthScreen(
+                    initialRole = currentRole,
+                    isStandaloneRole = isStandaloneMode,
                     onLoginSuccess = { profile -> viewModel.loginUser(profile) },
-                    onQuickDemoLogin = { role -> viewModel.quickDemoLogin(role) }
+                    onQuickDemoLogin = { role -> viewModel.quickDemoLogin(role) },
+                    onQuickKitchenStaffLogin = { staff -> viewModel.quickDemoKitchenStaffLogin(staff) }
                 )
             } else {
                 Crossfade(targetState = currentRole, label = "RoleTransition") { role ->
@@ -309,10 +445,16 @@ fun CaterersWaleApp(viewModel: CaterersViewModel) {
                                     customerPhone = customerPhone,
                                     deliveryDate = selectedDate,
                                     deliveryTimeSlot = selectedTimeSlot,
+                                    viewModel = viewModel,
                                     onBack = { customerScreen = CustomerScreen.ORDER_SUMMARY },
-                                    onConfirmPayment = { method ->
+                                    onConfirmPayment = { _ -> },
+                                    onConfirmPaymentWithAdvance = { method, isAdvance, finalDiscountedAmount ->
+                                        is30PercentAdvance = isAdvance
                                         val cartItems = viewModel.cartItemsList.value
-                                        val itemsSummary = cartItems.joinToString(", ") { "${it.name} (${it.quantity} ${it.unitType.name})" }
+                                        val itemsSummary = cartItems.joinToString(", ") {
+                                            val qtyStr = if (it.quantity % 1.0 == 0.0) "${it.quantity.toInt()}" else "${it.quantity}"
+                                            "${it.name} ($qtyStr ${it.unitType.name})"
+                                        }
                                         val catererId = cartItems.firstOrNull()?.catererId ?: "caterer_1"
                                         val catererName = cartItems.firstOrNull()?.catererName ?: "A1 Huma Caterers"
 
@@ -329,8 +471,8 @@ fun CaterersWaleApp(viewModel: CaterersViewModel) {
                                             catererId = catererId,
                                             catererName = catererName,
                                             itemsSummary = itemsSummary,
-                                            totalAmount = effectivePaymentAmount,
-                                            is30PercentAdvance = is30PercentAdvance,
+                                            totalAmount = finalDiscountedAmount,
+                                            is30PercentAdvance = isAdvance,
                                             paymentMethod = method,
                                             deliveryDate = selectedDate,
                                             deliveryTimeSlot = selectedTimeSlot,
@@ -435,16 +577,40 @@ fun CaterersWaleApp(viewModel: CaterersViewModel) {
                     }
 
                     UserRole.KITCHEN -> {
-                        KitchenMainContainer(
-                            viewModel = viewModel,
-                            onPreviewCustomerStore = { catererId ->
-                                selectedCatererId = catererId
-                                isExclusiveStoreMode = true
-                                isPartnerPreviewMode = true
-                                customerScreen = CustomerScreen.CATERER_DETAIL
-                                viewModel.switchRole(UserRole.CUSTOMER)
-                            }
-                        )
+                        if (isPartnerPreviewMode) {
+                            CatererDetailScreen(
+                                catererId = selectedCatererId,
+                                viewModel = viewModel,
+                                isExclusiveStore = true,
+                                isPartnerPreviewMode = true,
+                                onReturnToKitchen = {
+                                    isPartnerPreviewMode = false
+                                    isExclusiveStoreMode = false
+                                },
+                                onBack = {
+                                    isPartnerPreviewMode = false
+                                    isExclusiveStoreMode = false
+                                },
+                                onOpenCart = {
+                                    isPartnerPreviewMode = false
+                                    isExclusiveStoreMode = false
+                                },
+                                onOpenReviews = {}
+                            )
+                        } else {
+                            KitchenMainContainer(
+                                viewModel = viewModel,
+                                onPreviewCustomerStore = { catererId ->
+                                    selectedCatererId = catererId
+                                    isExclusiveStoreMode = true
+                                    isPartnerPreviewMode = true
+                                    if (lockedRole == null) {
+                                        customerScreen = CustomerScreen.CATERER_DETAIL
+                                        viewModel.switchRole(UserRole.CUSTOMER)
+                                    }
+                                }
+                            )
+                        }
                     }
 
                     UserRole.DELIVERY_BOY -> {

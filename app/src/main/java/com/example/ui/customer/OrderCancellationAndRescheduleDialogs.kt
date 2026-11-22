@@ -200,13 +200,6 @@ fun CustomerCancellationDialog(
                                 color = if (policy.customerRefundAmount > 0) VegGreen else Color(0xFFDC2626)
                             )
                         }
-                        if (policy.kitchenSettlementAmount > 0) {
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Kitchen Raw Material Credit:", fontSize = 10.5.sp, color = Color(0xFF475569))
-                                Text("₹${policy.kitchenSettlementAmount.toInt()}", fontSize = 10.5.sp, color = Color(0xFF475569), fontWeight = FontWeight.SemiBold)
-                            }
-                        }
                     }
                 }
 

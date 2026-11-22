@@ -20,16 +20,8 @@ class FirestoreConfigRepository(private val context: Context? = null) {
     private val firestore: FirebaseFirestore? by lazy {
         try {
             context?.let { CaterersApplication.initFirebase(it) }
-            val apps = if (context != null) FirebaseApp.getApps(context) else emptyList()
-            if (apps.isNotEmpty()) {
-                FirebaseFirestore.getInstance()
-            } else {
-                try {
-                    FirebaseFirestore.getInstance()
-                } catch (e: Exception) {
-                    null
-                }
-            }
+            val dbId = context?.getString(com.example.R.string.firestore_database_id) ?: "ai-studio-android-remixcat-71e55ec2-4108-449e-a576-eb80f2bf137b"
+            FirebaseFirestore.getInstance(dbId)
         } catch (e: Exception) {
             Log.w(tag, "FirebaseFirestore unavailable: ${e.message}")
             null

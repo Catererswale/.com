@@ -47,33 +47,17 @@ class CaterersRepository(private val dao: CaterersDao) {
 
     suspend fun seedInitialDataIfEmpty() {
         val existingCaterers = allCaterers.first()
+        // Always ensure A1 Huma Caterers has its real official menu and Mumbai address
+        val existingA1 = existingCaterers.find { it.id == "caterer_1" }
+        if (existingA1 == null || !existingA1.city.contains("Mumbai")) {
+            dao.insertCaterer(A1HumaMenuData.caterer)
+            dao.deleteMenuItemsByCaterer("caterer_1")
+            dao.insertMenuItems(A1HumaMenuData.getMenuItems())
+        }
+
         if (existingCaterers.isEmpty()) {
             val caterersList = listOf(
-                CatererEntity(
-                    id = "caterer_1",
-                    name = "A1 Huma Caterers",
-                    kitchenName = "A1 Huma Central Kitchen",
-                    logoUrl = "",
-                    bannerUrl = "",
-                    rating = 4.8f,
-                    reviewCount = 342,
-                    deliveryTimeMinutes = 45,
-                    minOrderAmount = 1000.0,
-                    deliveryCharge = 150.0,
-                    distanceKm = 2.4,
-                    fssaiLicense = "11223344556677",
-                    isFssaiVerified = true,
-                    isOpenForBooking = true,
-                    address = "Plot 42, Catering Market, Okhla Phase 3",
-                    city = "New Delhi",
-                    ownerMobile = "+91 9876543210",
-                    kycStatus = KycStatus.APPROVED,
-                    aadhaarNumber = "9988 7766 5544",
-                    panNumber = "ABCDE1234F",
-                    bankAccount = "918273645012",
-                    bankIfsc = "HDFC0001234",
-                    dietaryType = "BOTH"
-                ),
+                A1HumaMenuData.caterer,
                 CatererEntity(
                     id = "caterer_2",
                     name = "Shahi Dawat Catering",
@@ -146,77 +130,13 @@ class CaterersRepository(private val dao: CaterersDao) {
             dao.insertCaterers(caterersList)
 
             // Seed Menu Items
-            val menuItems = listOf(
-                MenuItemEntity(
-                    id = "m1", catererId = "caterer_1", catererName = "A1 Huma Caterers",
-                    category = "Chicken Biryani", name = "Special Dum Chicken Biryani",
-                    description = "Aromatic basmati rice cooked with succulent bone-in chicken & secret shahi spices.",
-                    imageUrl = "", foodType = FoodType.NON_VEG, unitType = UnitType.KG,
-                    pricePerUnit = 380.0, minQuantity = 1.0, maxQuantity = 50.0, stepQuantity = 0.5,
-                    isPopular = true, isRecommended = true
-                ),
-                MenuItemEntity(
-                    id = "m2", catererId = "caterer_1", catererName = "A1 Huma Caterers",
-                    category = "Mutton Biryani", name = "Royal Hyderabadi Mutton Biryani",
-                    description = "Tender mutton pieces layered with saffron saffron rice and fried onions.",
-                    imageUrl = "", foodType = FoodType.NON_VEG, unitType = UnitType.KG,
-                    pricePerUnit = 650.0, minQuantity = 1.0, maxQuantity = 40.0, stepQuantity = 0.5,
-                    isPopular = true
-                ),
-                MenuItemEntity(
-                    id = "m3", catererId = "caterer_1", catererName = "A1 Huma Caterers",
-                    category = "Veg Biryani", name = "Shahi Paneer Dum Biryani",
-                    description = "Fresh cottage cheese cubes marinated in yogurt and spices layered with fragrant rice.",
-                    imageUrl = "", foodType = FoodType.VEG, unitType = UnitType.KG,
-                    pricePerUnit = 280.0, minQuantity = 1.0, maxQuantity = 50.0, stepQuantity = 0.5,
-                    isRecommended = true
-                ),
-                MenuItemEntity(
-                    id = "m4", catererId = "caterer_1", catererName = "A1 Huma Caterers",
-                    category = "Chicken Gravy", name = "Butter Chicken (Shahi Style)",
-                    description = "Rich, creamy tomato-butter gravy with char-grilled chicken tikka.",
-                    imageUrl = "", foodType = FoodType.NON_VEG, unitType = UnitType.KG,
-                    pricePerUnit = 420.0, minQuantity = 1.0, maxQuantity = 30.0, stepQuantity = 0.5
-                ),
-                MenuItemEntity(
-                    id = "m5", catererId = "caterer_1", catererName = "A1 Huma Caterers",
-                    category = "Veg Gravy", name = "Kadhai Paneer Gravy",
-                    description = "Paneer cooked with bell peppers, onion, and freshly ground kadhai spices.",
-                    imageUrl = "", foodType = FoodType.VEG, unitType = UnitType.KG,
-                    pricePerUnit = 340.0, minQuantity = 1.0, maxQuantity = 30.0, stepQuantity = 0.5
-                ),
-                MenuItemEntity(
-                    id = "m6", catererId = "caterer_1", catererName = "A1 Huma Caterers",
-                    category = "Chinese", name = "Veg Hakka Noodles",
-                    description = "Wok-tossed noodles with crunchy spring vegetables and oriental sauces.",
-                    imageUrl = "", foodType = FoodType.VEG, unitType = UnitType.KG,
-                    pricePerUnit = 240.0, minQuantity = 1.0, maxQuantity = 25.0, stepQuantity = 0.5
-                ),
-                MenuItemEntity(
-                    id = "m7", catererId = "caterer_1", catererName = "A1 Huma Caterers",
-                    category = "Desserts", name = "Shahi Zafrani Kheer",
-                    description = "Creamy rice pudding infused with saffron, green cardamom, and dry fruits.",
-                    imageUrl = "", foodType = FoodType.VEG, unitType = UnitType.LITRE,
-                    pricePerUnit = 220.0, minQuantity = 1.0, maxQuantity = 50.0, stepQuantity = 1.0,
-                    isPopular = true
-                ),
-                MenuItemEntity(
-                    id = "m8", catererId = "caterer_1", catererName = "A1 Huma Caterers",
-                    category = "Desserts", name = "Soft Gulab Jamun",
-                    description = "Melt-in-mouth khoya dumplings soaked in rose-scented sugar syrup.",
-                    imageUrl = "", foodType = FoodType.VEG, unitType = UnitType.DOZEN,
-                    pricePerUnit = 200.0, minQuantity = 1.0, maxQuantity = 50.0, stepQuantity = 1.0
-                ),
-                MenuItemEntity(
-                    id = "m9", catererId = "caterer_1", catererName = "A1 Huma Caterers",
-                    category = "Beverages", name = "Fresh Mint Jaljeera Lassi",
-                    description = "Refreshing chilled yogurt lassi flavoured with fresh mint and roasted cumin.",
-                    imageUrl = "", foodType = FoodType.VEG, unitType = UnitType.LITRE,
-                    pricePerUnit = 140.0, minQuantity = 2.0, maxQuantity = 100.0, stepQuantity = 1.0
-                ),
-                // Shahi Dawat Catering (caterer_2)
-                MenuItemEntity(
-                    id = "m10", catererId = "caterer_2", catererName = "Shahi Dawat Catering",
+            val menuItems = mutableListOf<MenuItemEntity>()
+            menuItems.addAll(A1HumaMenuData.getMenuItems())
+            menuItems.addAll(
+                listOf(
+                    // Shahi Dawat Catering (caterer_2)
+                    MenuItemEntity(
+                        id = "m10", catererId = "caterer_2", catererName = "Shahi Dawat Catering",
                     category = "Chicken Biryani", name = "Awadhi Dum Chicken Biryani",
                     description = "Traditional slow cooked Awadhi biryani with kewra water and saffron chicken.",
                     imageUrl = "", foodType = FoodType.NON_VEG, unitType = UnitType.KG,
@@ -318,7 +238,7 @@ class CaterersRepository(private val dao: CaterersDao) {
                     pricePerUnit = 45.0, minQuantity = 10.0, maxQuantity = 250.0, stepQuantity = 5.0,
                     isPopular = true
                 )
-            )
+            ))
             dao.insertMenuItems(menuItems)
 
             // Seed Delivery Boys
@@ -719,9 +639,12 @@ class CaterersRepository(private val dao: CaterersDao) {
     }
 
     suspend fun addToCart(item: MenuItemEntity, qty: Double) {
+        val safeMin = item.minQuantity.coerceAtLeast(0.1)
+        val safeMax = item.maxQuantity.coerceAtLeast(safeMin)
+        val safeQty = qty.coerceIn(safeMin, safeMax)
         val cartItemId = "cart_${item.id}"
         val effectivePrice = item.getEffectivePrice()
-        val total = effectivePrice * qty
+        val total = effectivePrice * safeQty
         val cartItem = CartItemEntity(
             id = cartItemId,
             menuItemId = item.id,
@@ -733,7 +656,7 @@ class CaterersRepository(private val dao: CaterersDao) {
             unitType = item.unitType,
             pricePerUnit = effectivePrice,
             originalPricePerUnit = item.pricePerUnit,
-            quantity = qty,
+            quantity = safeQty,
             totalPrice = total,
             catererDiscountType = item.catererDiscountType,
             catererDiscountValue = item.catererDiscountValue,
@@ -741,6 +664,17 @@ class CaterersRepository(private val dao: CaterersDao) {
             adminDiscountValue = item.adminDiscountValue
         )
         dao.insertCartItem(cartItem)
+    }
+
+    suspend fun updateCartItemQuantity(cartItem: CartItemEntity, newQty: Double, minQty: Double = 0.5, maxQty: Double = 500.0) {
+        val safeMin = minQty.coerceAtLeast(0.1)
+        val safeMax = maxQty.coerceAtLeast(safeMin)
+        val safeQty = newQty.coerceIn(safeMin, safeMax)
+        val updated = cartItem.copy(
+            quantity = safeQty,
+            totalPrice = cartItem.pricePerUnit * safeQty
+        )
+        dao.insertCartItem(updated)
     }
 
     suspend fun addCustomAddOnToCart(
@@ -797,10 +731,11 @@ class CaterersRepository(private val dao: CaterersDao) {
         redeemedLoyaltyPoints: Int = 0,
         earnedLoyaltyPoints: Int = 0,
         isOfflineBooking: Boolean = false,
-        customAdvanceAmount: Double? = null
+        customAdvanceAmount: Double? = null,
+        orderStatus: OrderStatus = OrderStatus.CONFIRMED,
+        customOrderId: String? = null
     ): String {
-        val orderNum = (10000..99999).random()
-        val orderId = "CW-$orderNum"
+        val orderId = customOrderId ?: "CW-${(10000..99999).random()}"
         // 50% Advance Booking Token or Custom/COD Advance
         val advancePaid = if (customAdvanceAmount != null) {
             customAdvanceAmount.coerceIn(0.0, totalAmount)
@@ -829,7 +764,7 @@ class CaterersRepository(private val dao: CaterersDao) {
                 advancePaid <= 0.0 -> PaymentStatus.BALANCE_PENDING
                 else -> PaymentStatus.ADVANCE_PAID_30
             },
-            orderStatus = OrderStatus.CONFIRMED,
+            orderStatus = orderStatus,
             deliveryDate = deliveryDate,
             deliveryTimeSlot = deliveryTimeSlot,
             deliveryOtp = otp,
@@ -893,6 +828,7 @@ class CaterersRepository(private val dao: CaterersDao) {
             OrderStatus.OUT_FOR_DELIVERY -> Pair("Out For Delivery! 🚚", "Your order #${order.orderId} is out for delivery with $driverName.")
             OrderStatus.DELIVERED -> Pair("Order Delivered! 🎉", "Order #${order.orderId} delivered successfully. Bon Appétit!")
             OrderStatus.CANCELLED -> Pair("Order Cancelled ❌", "Order #${order.orderId} was cancelled.")
+            OrderStatus.ON_HOLD -> Pair("Order On Hold ⏸️", "Booking #${order.orderId} enquiry placed on hold.")
         }
 
         val custNotif = NotificationEntity(
@@ -918,10 +854,14 @@ class CaterersRepository(private val dao: CaterersDao) {
         context: Context? = null
     ) {
         val order = dao.getOrderById(orderId)
-        val finalBartanDesc = bartanDescription ?: order?.bartanDescription ?: "Handi & Serving Spoons"
+        val finalBartanDesc = bartanDescription ?: order?.bartanDescription ?: "0 Bartan"
         val totalContainers = handiCount + spoonsCount + boxesCount
-        val isDisposable = finalBartanDesc.contains("Disposable", ignoreCase = true) || finalBartanDesc.contains("डिस्पोजेबल", ignoreCase = true) || finalBartanDesc.contains("No Bartan", ignoreCase = true)
-        val hasContainers = !isDisposable && (totalContainers > 0 || bartanDescription != null)
+        val isDisposable = finalBartanDesc.contains("Disposable", ignoreCase = true) ||
+                finalBartanDesc.contains("डिस्पोजेबल", ignoreCase = true) ||
+                finalBartanDesc.contains("No Bartan", ignoreCase = true) ||
+                finalBartanDesc.contains("0 Bartan", ignoreCase = true) ||
+                finalBartanDesc.contains("कोई बर्तन नहीं", ignoreCase = true)
+        val hasContainers = !isDisposable && totalContainers > 0
 
         dao.assignDeliveryBoyWithBartan(
             orderId = orderId,
@@ -934,7 +874,7 @@ class CaterersRepository(private val dao: CaterersDao) {
         )
 
         if (hasContainers) {
-            dao.incrementDeliveryBoyBartanCount(boy.id, if (totalContainers > 0) totalContainers else 1)
+            dao.incrementDeliveryBoyBartanCount(boy.id, totalContainers)
 
             val existingRecord = dao.getBartanRecordByOrderId(orderId)
             val record = existingRecord?.copy(
@@ -962,14 +902,14 @@ class CaterersRepository(private val dao: CaterersDao) {
                 deliveryBoyMobile = boy.mobile,
                 isCollected = false,
                 returnStatus = "WITH_DELIVERY_BOY",
-                handiCount = if (handiCount > 0) handiCount else 2,
-                spoonsCount = if (spoonsCount > 0) spoonsCount else 2,
-                boxesCount = if (boxesCount > 0) boxesCount else 1
+                handiCount = handiCount,
+                spoonsCount = spoonsCount,
+                boxesCount = boxesCount
             )
             dao.insertBartanRecord(record)
         }
 
-        val containerNote = if (hasContainers) " 🍲 Containers: $finalBartanDesc" else " (Disposable Packaging)"
+        val containerNote = if (hasContainers) " 🍲 Containers: $finalBartanDesc" else " (0 Bartan / Disposable)"
         val title = "Delivery Partner Assigned 🚴"
         val message = "Driver ${boy.name} (${boy.mobile}) assigned to order #${orderId}.$containerNote"
 
@@ -1070,12 +1010,19 @@ class CaterersRepository(private val dao: CaterersDao) {
         return false
     }
 
-    suspend fun markCashReceivedByKitchen(orderId: String, context: Context? = null) {
+    suspend fun markCashReceivedByKitchen(orderId: String, staffName: String = "", context: Context? = null) {
         val order = dao.getOrderById(orderId) ?: return
-        dao.updateOrderCashSubmitted(orderId = orderId, submitted = true, paymentStatus = PaymentStatus.FULLY_SETTLED)
+        val currentTime = SimpleDateFormat("hh:mm a, dd MMM yyyy", Locale.getDefault()).format(Date())
+        dao.updateOrderCashSubmittedWithStaff(
+            orderId = orderId,
+            submitted = true,
+            paymentStatus = PaymentStatus.FULLY_SETTLED,
+            staffName = staffName,
+            time = currentTime
+        )
 
         val title = "💵 Cash Received & Verified!"
-        val message = "Kitchen has confirmed receiving ₹${order.balanceAmount.toInt()} cash from Delivery Boy ${order.deliveryBoyName ?: "Partner"} for Order #${orderId}."
+        val message = "Kitchen has confirmed receiving ₹${order.balanceAmount.toInt()} cash by $staffName from Delivery Boy ${order.deliveryBoyName ?: "Partner"} for Order #${orderId}."
         dao.insertNotification(
             NotificationEntity(
                 id = "n_cash_recv_${orderId}_${System.currentTimeMillis()}",
@@ -1088,13 +1035,21 @@ class CaterersRepository(private val dao: CaterersDao) {
             NotificationEntity(
                 id = "n_cash_db_${orderId}_${System.currentTimeMillis()}",
                 title = "💵 Cash Handover Accepted!",
-                message = "Kitchen cashier confirmed receiving ₹${order.balanceAmount.toInt()} for Order #${orderId}. Your liability is settled ✅",
+                message = "Kitchen staff ($staffName) confirmed receiving ₹${order.balanceAmount.toInt()} for Order #${orderId}. Your liability is settled ✅",
                 targetRole = UserRole.DELIVERY_BOY
             )
         )
         if (context != null) {
             NotificationHelper.showSystemNotification(context, title, message)
         }
+    }
+
+    suspend fun updateBartanHandedOverAtCounter(orderId: String) {
+        dao.updateBartanHandedOverAtCounter(orderId)
+    }
+
+    suspend fun getBartanRecordByOrderId(orderId: String): BartanRecordEntity? {
+        return dao.getBartanRecordByOrderId(orderId)
     }
 
     suspend fun deliveryBoyNotifyCashHandover(orderId: String, context: Context? = null) {
@@ -1196,6 +1151,123 @@ class CaterersRepository(private val dao: CaterersDao) {
 
     suspend fun addCaterer(caterer: CatererEntity) {
         dao.insertCaterer(caterer)
+        val existingMenu = dao.getMenuItemsByCaterer(caterer.id).first()
+        if (existingMenu.isEmpty()) {
+            val isPureVeg = caterer.dietaryType.equals("PURE_VEG", ignoreCase = true)
+            val isPureNonVeg = caterer.dietaryType.equals("NON_VEG", ignoreCase = true)
+            val starterItems = mutableListOf<MenuItemEntity>()
+
+            if (!isPureVeg) {
+                starterItems.add(
+                    MenuItemEntity(
+                        id = "${caterer.id}_m1",
+                        catererId = caterer.id,
+                        catererName = caterer.name,
+                        category = "Chicken Biryani",
+                        name = "Shahi Dum Chicken Biryani",
+                        description = "Fragrant basmati rice layered with saffron, tender chicken & traditional spices.",
+                        foodType = FoodType.NON_VEG,
+                        pricePerUnit = 260.0,
+                        unitType = UnitType.KG,
+                        minQuantity = 1.0,
+                        maxQuantity = 50.0,
+                        stepQuantity = 0.5,
+                        imageUrl = "https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=500"
+                    )
+                )
+                starterItems.add(
+                    MenuItemEntity(
+                        id = "${caterer.id}_m2",
+                        catererId = caterer.id,
+                        catererName = caterer.name,
+                        category = "Mutton Biryani",
+                        name = "Royal Zafrani Mutton Biryani",
+                        description = "Slow-cooked deg mutton biryani with rich caramelised onions & kewra.",
+                        foodType = FoodType.NON_VEG,
+                        pricePerUnit = 380.0,
+                        unitType = UnitType.KG,
+                        minQuantity = 1.0,
+                        maxQuantity = 50.0,
+                        stepQuantity = 0.5,
+                        imageUrl = "https://images.unsplash.com/photo-1633945274405-b6c8069047b0?w=500"
+                    )
+                )
+                starterItems.add(
+                    MenuItemEntity(
+                        id = "${caterer.id}_m3",
+                        catererId = caterer.id,
+                        catererName = caterer.name,
+                        category = "Chicken Gravy",
+                        name = "Mughlai Chicken Korma",
+                        description = "Creamy almond & cashew Mughlai gravy cooked in pure ghee.",
+                        foodType = FoodType.NON_VEG,
+                        pricePerUnit = 300.0,
+                        unitType = UnitType.KG,
+                        minQuantity = 1.0,
+                        maxQuantity = 40.0,
+                        stepQuantity = 0.5,
+                        imageUrl = "https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?w=500"
+                    )
+                )
+            }
+
+            if (!isPureNonVeg) {
+                starterItems.add(
+                    MenuItemEntity(
+                        id = "${caterer.id}_m4",
+                        catererId = caterer.id,
+                        catererName = caterer.name,
+                        category = "Veg Biryani",
+                        name = "Subz Dum Paneer Biryani",
+                        description = "Fresh paneer cubes & garden vegetables cooked on dum with basmati rice.",
+                        foodType = FoodType.VEG,
+                        pricePerUnit = 220.0,
+                        unitType = UnitType.KG,
+                        minQuantity = 1.0,
+                        maxQuantity = 50.0,
+                        stepQuantity = 0.5,
+                        imageUrl = "https://images.unsplash.com/photo-1642821373181-696a54913e9a?w=500"
+                    )
+                )
+                starterItems.add(
+                    MenuItemEntity(
+                        id = "${caterer.id}_m5",
+                        catererId = caterer.id,
+                        catererName = caterer.name,
+                        category = "Veg Gravy",
+                        name = "Shahi Paneer Makhani",
+                        description = "Rich tomato and cashew gravy with soft malai paneer cubes.",
+                        foodType = FoodType.VEG,
+                        pricePerUnit = 250.0,
+                        unitType = UnitType.KG,
+                        minQuantity = 1.0,
+                        maxQuantity = 40.0,
+                        stepQuantity = 0.5,
+                        imageUrl = "https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=500"
+                    )
+                )
+            }
+
+            starterItems.add(
+                MenuItemEntity(
+                    id = "${caterer.id}_m6",
+                    catererId = caterer.id,
+                    catererName = caterer.name,
+                    category = "Desserts",
+                    name = "Shahi Zafrani Kheer / Tukda",
+                    description = "Traditional festive dessert garnished with pistachios, almonds & saffron.",
+                    foodType = FoodType.VEG,
+                    pricePerUnit = 240.0,
+                    unitType = UnitType.KG,
+                    minQuantity = 1.0,
+                    maxQuantity = 30.0,
+                    stepQuantity = 0.5,
+                    imageUrl = "https://images.unsplash.com/photo-1541832676-9b763b0239ab?w=500"
+                )
+            )
+
+            dao.insertMenuItems(starterItems)
+        }
     }
 
     suspend fun addDeliveryBoy(boy: DeliveryBoyEntity) {
@@ -1225,6 +1297,82 @@ class CaterersRepository(private val dao: CaterersDao) {
 
     suspend fun updateBartanCollectedWithStatus(id: String, isCollected: Boolean, date: String, status: String) {
         dao.updateBartanCollectedFull(id, isCollected, date, status)
+    }
+
+    suspend fun verifyAndCompleteBartanReturn(
+        recordId: String,
+        orderId: String,
+        deliveryBoyId: String,
+        kitchenId: String = "caterer_1",
+        returnedHandis: Int,
+        returnedSpoons: Int,
+        returnedBoxes: Int,
+        missingRemarks: String,
+        staffName: String,
+        context: Context? = null
+    ) {
+        val record = (if (orderId.isNotBlank()) dao.getBartanRecordByOrderId(orderId) else null)
+            ?: (if (recordId.isNotBlank()) dao.getBartanRecordById(recordId) else null)
+        val issuedHandis = record?.handiCount ?: 0
+        val issuedSpoons = record?.spoonsCount ?: 0
+        val issuedBoxes = record?.boxesCount ?: 0
+        val totalIssued = (issuedHandis + issuedSpoons + issuedBoxes).coerceAtLeast(1)
+        val totalReceived = returnedHandis + returnedSpoons + returnedBoxes
+
+        val isFullyReturned = totalReceived >= totalIssued
+        val status = when {
+            totalReceived >= totalIssued -> "RETURNED_FULL"
+            totalReceived > 0 -> "RETURNED_PARTIAL"
+            else -> "DAMAGED_LOST"
+        }
+        val currentDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        val currentTime = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
+
+        val targetId = record?.id ?: recordId
+        dao.updateBartanVerification(
+            id = targetId,
+            isCollected = isFullyReturned || totalReceived > 0,
+            date = currentDate,
+            returnStatus = status,
+            retHandis = returnedHandis,
+            retSpoons = returnedSpoons,
+            retBoxes = returnedBoxes,
+            remarks = missingRemarks,
+            staffName = staffName,
+            time = currentTime
+        )
+
+        val targetOrderId = record?.orderId ?: orderId
+        dao.updateBartanStatus(targetOrderId, isFullyReturned)
+
+        // Decrement delivery partner's pending bartans
+        val boyId = if (!record?.deliveryBoyId.isNullOrBlank()) record!!.deliveryBoyId else deliveryBoyId
+        if (boyId.isNotBlank() && totalReceived > 0) {
+            dao.decrementDeliveryBoyBartanCount(boyId, totalReceived)
+        }
+
+        // Restock kitchen inventory
+        val targetKitchenId = if (!record?.catererId.isNullOrBlank()) record!!.catererId else kitchenId
+        if (returnedHandis > 0) {
+            dao.incrementUtensilStock(targetKitchenId, "Handi", "🍲", returnedHandis)
+        }
+        if (returnedSpoons > 0) {
+            dao.incrementUtensilStock(targetKitchenId, "Spoon", "🥄", returnedSpoons)
+        }
+        if (returnedBoxes > 0) {
+            dao.incrementUtensilStock(targetKitchenId, "Crate", "📦", returnedBoxes)
+        }
+
+        val notifTitle = if (isFullyReturned) "🍲 Bartan Return Verified (Full)" else "⚠️ Bartan Return Verified (Partial)"
+        val notifMsg = "Order #$targetOrderId: $totalReceived/$totalIssued containers returned & verified by $staffName. Rider inventory updated!"
+        dao.insertNotification(
+            NotificationEntity(
+                id = "n_bartan_ret_${System.currentTimeMillis()}",
+                title = notifTitle,
+                message = notifMsg,
+                targetRole = UserRole.KITCHEN
+            )
+        )
     }
 
     fun getBartanRecordsByDeliveryBoy(deliveryBoyId: String): Flow<List<BartanRecordEntity>> {

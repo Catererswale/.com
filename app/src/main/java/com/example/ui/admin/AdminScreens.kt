@@ -1118,11 +1118,23 @@ fun AdminCatererManagementScreen(
 ) {
     val caterers by viewModel.caterersList.collectAsState()
     var selectedCatererForCommission by remember { mutableStateOf<CatererEntity?>(null) }
+    var showQuickAddCatererDialog by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf("ALL") } // ALL, ONLINE_ACTIVE, ONLINE_PAUSED, OFFLINE_ENABLED, OFFLINE_DISABLED
 
     val onlineActiveCount = caterers.count { it.isOpenForBooking }
     val offlineActiveCount = caterers.count { it.isOfflineBookingEnabled }
+
+    if (showQuickAddCatererDialog) {
+        com.example.ui.common.QuickAddCatererDialog(
+            onDismiss = { showQuickAddCatererDialog = false },
+            onCatererCreated = { newCaterer ->
+                viewModel.addKitchenPartner(newCaterer) {
+                    showQuickAddCatererDialog = false
+                }
+            }
+        )
+    }
 
     val filteredCaterers = remember(caterers, searchQuery, selectedFilter) {
         caterers.filter { cat ->
@@ -1157,14 +1169,14 @@ fun AdminCatererManagementScreen(
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Button(
-                    onClick = onNavigateToAddKitchen,
+                    onClick = { showQuickAddCatererDialog = true },
                     colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary, contentColor = Color.White),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.testTag("admin_add_new_partner_button")
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Add Kitchen", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("+ Add Caterer", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
             

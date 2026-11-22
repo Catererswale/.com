@@ -684,6 +684,7 @@ fun KitchenResponsiveDashboard(
     onPreviewCustomerStore: (String) -> Unit = {},
     isBigScreenMode: Boolean = false,
     onToggleBigScreenMode: () -> Unit = {},
+    isRedBg: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -693,7 +694,8 @@ fun KitchenResponsiveDashboard(
             KitchenTabletLayout(
                 viewModel = viewModel,
                 onNavigateTab = onNavigateTab,
-                onPreviewCustomerStore = onPreviewCustomerStore
+                onPreviewCustomerStore = onPreviewCustomerStore,
+                isRedBg = isRedBg
             )
         } else {
             KitchenMobileLayout(
@@ -701,7 +703,8 @@ fun KitchenResponsiveDashboard(
                 onNavigateTab = onNavigateTab,
                 onPreviewCustomerStore = onPreviewCustomerStore,
                 isBigScreenMode = isBigScreenMode,
-                onToggleBigScreenMode = onToggleBigScreenMode
+                onToggleBigScreenMode = onToggleBigScreenMode,
+                isRedBg = isRedBg
             )
         }
     }
@@ -715,7 +718,8 @@ fun KitchenResponsiveDashboard(
 private fun KitchenTabletLayout(
     viewModel: CaterersViewModel,
     onNavigateTab: (Int) -> Unit,
-    onPreviewCustomerStore: (String) -> Unit
+    onPreviewCustomerStore: (String) -> Unit,
+    isRedBg: Boolean = false
 ) {
     val context = LocalContext.current
     val orders by viewModel.ordersList.collectAsState()
@@ -861,7 +865,7 @@ private fun KitchenTabletLayout(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
-                .background(Color(0xFFF8FAFC))
+                .background(if (isRedBg) Color(0xFFB91C1C) else Color.White)
         ) {
             // Top Bar
             KitchenTopHeader(
@@ -1098,7 +1102,9 @@ private fun KitchenTabletLayout(
                     spoonsCount = spoons,
                     boxesCount = boxes
                 )
-                Toast.makeText(context, "Assigned to ${boy.name} with $bartanDesc!", Toast.LENGTH_SHORT).show()
+                val totalContainers = handis + spoons + boxes
+                val msg = if (totalContainers > 0) "Assigned to ${boy.name} with $totalContainers Bartan!" else "Assigned to ${boy.name} (0 Bartan / No Return)!"
+                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                 showAssignDeliveryModal = null
             }
         )
@@ -1114,7 +1120,8 @@ private fun KitchenMobileLayout(
     onNavigateTab: (Int) -> Unit,
     onPreviewCustomerStore: (String) -> Unit,
     isBigScreenMode: Boolean = false,
-    onToggleBigScreenMode: () -> Unit = {}
+    onToggleBigScreenMode: () -> Unit = {},
+    isRedBg: Boolean = false
 ) {
     val context = LocalContext.current
     var localBigScreenMode by remember { mutableStateOf(false) }
@@ -1291,7 +1298,7 @@ private fun KitchenMobileLayout(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFFF8FAFC))
+                .background(if (isRedBg) Color(0xFFB91C1C) else Color.White)
         ) {
             // Mobile Top Bar (Adaptive for Big Screen Mode)
             if (effectiveBigScreen) {
@@ -1299,27 +1306,27 @@ private fun KitchenMobileLayout(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Surface(
                                 color = AmberSecondary,
-                                shape = RoundedCornerShape(12.dp)
+                                shape = RoundedCornerShape(10.dp)
                             ) {
                                 Text(
                                     "⛶ बड़ी स्क्रीन चालू",
-                                    fontSize = 11.sp,
+                                    fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.Black,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                                 )
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 "${dateAndTimeFilteredOrders.size} Orders",
-                                fontSize = 12.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
@@ -1327,63 +1334,61 @@ private fun KitchenMobileLayout(
 
                         Surface(
                             color = Color(0xFF334155),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.clickable {
                                 localBigScreenMode = false
                                 onToggleBigScreenMode()
                             }
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("सामान्य दृश्य (Exit) ✕", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("सामान्य दृश्य (Exit) ✕", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
                             }
                         }
                     }
                 }
             } else {
-                Surface(color = Color(0xFF0F172A), contentColor = Color.White) {
+                Surface(color = if (isRedBg) Color(0xFF7A091E) else Color(0xFF0F172A), contentColor = Color.White) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White)
+                            IconButton(onClick = { scope.launch { drawerState.open() } }, modifier = Modifier.size(28.dp)) {
+                                Icon(Icons.Default.Menu, contentDescription = "Menu", tint = Color.White, modifier = Modifier.size(17.dp))
                             }
-                            Column {
-                                Text("Kitchen Panel", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                Text("A1 Huma • Online 🟢", fontSize = 11.sp, color = AmberSecondary)
-                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Live Operations", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
 
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             // Big Screen Mode Toggle Button
                             Surface(
                                 color = AmberSecondary,
-                                shape = RoundedCornerShape(14.dp),
+                                shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier
-                                    .padding(end = 6.dp)
+                                    .padding(end = 4.dp)
                                     .clickable {
                                         localBigScreenMode = true
                                         onToggleBigScreenMode()
                                     }
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("⛶ बड़ी स्क्रीन", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                    Text("⛶ बड़ा", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                                 }
                             }
 
                             Surface(
                                 color = Color(0xFF1E293B),
-                                shape = RoundedCornerShape(16.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier
                                     .padding(end = 4.dp)
                                     .clickable {
@@ -1406,16 +1411,16 @@ private fun KitchenMobileLayout(
                                     }
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Default.Today, contentDescription = null, tint = AmberSecondary, modifier = Modifier.size(13.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(currentActiveDateLabel, fontSize = 11.sp, color = Color.White)
+                                    Icon(Icons.Default.Today, contentDescription = null, tint = AmberSecondary, modifier = Modifier.size(11.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(currentActiveDateLabel, fontSize = 10.sp, color = Color.White)
                                 }
                             }
-                            IconButton(onClick = { Toast.makeText(context, "Refreshed live orders!", Toast.LENGTH_SHORT).show() }) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color.White, modifier = Modifier.size(18.dp))
+                            IconButton(onClick = { Toast.makeText(context, "Refreshed live orders!", Toast.LENGTH_SHORT).show() }, modifier = Modifier.size(28.dp)) {
+                                Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = Color.White, modifier = Modifier.size(16.dp))
                             }
                         }
                     }
@@ -1426,9 +1431,9 @@ private fun KitchenMobileLayout(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.White)
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    .background(if (isRedBg) Color(0xFF7A091E) else Color.White)
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
@@ -1436,25 +1441,25 @@ private fun KitchenMobileLayout(
                         .weight(1f)
                         .clickable { mobileDashboardView = "ORDERS_PIPELINE" },
                     shape = RoundedCornerShape(8.dp),
-                    color = if (mobileDashboardView == "ORDERS_PIPELINE") SaffronPrimary else Color(0xFFF1F5F9)
+                    color = if (mobileDashboardView == "ORDERS_PIPELINE") SaffronPrimary else if (isRedBg) Color(0xFF991B1B) else Color(0xFFF1F5F9)
                 ) {
                     Row(
-                        modifier = Modifier.padding(vertical = 7.dp),
+                        modifier = Modifier.padding(vertical = 5.dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             Icons.Default.Dashboard,
                             contentDescription = null,
-                            tint = if (mobileDashboardView == "ORDERS_PIPELINE") Color.White else Color(0xFF475569),
-                            modifier = Modifier.size(15.dp)
+                            tint = if (mobileDashboardView == "ORDERS_PIPELINE" || isRedBg) Color.White else Color(0xFF475569),
+                            modifier = Modifier.size(14.dp)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
                         Text(
                             "Pipeline (${dateAndTimeFilteredOrders.size})",
-                            fontSize = 11.sp,
+                            fontSize = 10.5.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (mobileDashboardView == "ORDERS_PIPELINE") Color.White else Color(0xFF475569)
+                            color = if (mobileDashboardView == "ORDERS_PIPELINE" || isRedBg) Color.White else Color(0xFF475569)
                         )
                     }
                 }
@@ -1464,7 +1469,7 @@ private fun KitchenMobileLayout(
                         .weight(1f)
                         .clickable { mobileDashboardView = "DELIVERY_PARTNERS" },
                     shape = RoundedCornerShape(8.dp),
-                    color = if (mobileDashboardView == "DELIVERY_PARTNERS") SaffronPrimary else Color(0xFFF1F5F9)
+                    color = if (mobileDashboardView == "DELIVERY_PARTNERS") SaffronPrimary else if (isRedBg) Color(0xFF991B1B) else Color(0xFFF1F5F9)
                 ) {
                     Row(
                         modifier = Modifier.padding(vertical = 7.dp),
@@ -1537,24 +1542,24 @@ private fun KitchenMobileLayout(
                 LazyRow(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color.White)
-                        .padding(vertical = 6.dp, horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        .background(if (isRedBg) Color(0xFF991B1B) else Color.White)
+                        .padding(vertical = 4.dp, horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(stages.indices.toList()) { index ->
                         val isSelected = selectedStageIndex == index
                         Surface(
-                            shape = RoundedCornerShape(18.dp),
-                            color = if (isSelected) SaffronPrimary else Color(0xFFF1F5F9),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) SaffronPrimary else Color(0xFFCBD5E1)),
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (isSelected) SaffronPrimary else if (isRedBg) Color(0xFF7A091E) else Color(0xFFF1F5F9),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) SaffronPrimary else if (isRedBg) Color(0xFFB91C1C) else Color(0xFFCBD5E1)),
                             modifier = Modifier.clickable { selectedStageIndex = index }
                         ) {
                             Text(
                                 text = stageLabels[index],
-                                fontSize = 12.sp,
+                                fontSize = 10.5.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = if (isSelected) Color.White else Color(0xFF334155),
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                color = if (isSelected || isRedBg) Color.White else Color(0xFF334155),
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
                             )
                         }
                     }
@@ -1684,7 +1689,9 @@ private fun KitchenMobileLayout(
                     spoonsCount = spoons,
                     boxesCount = boxes
                 )
-                Toast.makeText(context, "Assigned to ${boy.name} with $bartanDesc!", Toast.LENGTH_SHORT).show()
+                val totalContainers = handis + spoons + boxes
+                val msg = if (totalContainers > 0) "Assigned to ${boy.name} with $totalContainers Bartan!" else "Assigned to ${boy.name} (0 Bartan / No Return)!"
+                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                 showAssignDeliveryModal = null
             }
         )
@@ -2216,14 +2223,89 @@ private fun KitchenKanbanOrderCard(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // Customer Name & Phone
+            // Customer Name & Phone Details
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(order.customerName, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1E293B))
-                Text(order.customerMobile, fontSize = 11.sp, color = Color.Gray)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Person, contentDescription = null, tint = SaffronPrimary, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(order.customerName, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF1E293B))
+                }
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = Color(0xFFE8F5E9),
+                    border = BorderStroke(1.dp, Color(0xFFC8E6C9))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Call, contentDescription = null, tint = VegGreen, modifier = Modifier.size(11.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(order.customerMobile, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = VegGreen)
+                    }
+                }
+            }
+
+            // Out for Delivery: Delivery Boy & Rider Details
+            if (order.orderStatus == OrderStatus.OUT_FOR_DELIVERY || order.orderStatus == OrderStatus.ASSIGNED_DELIVERY || order.orderStatus == OrderStatus.DELIVERED || !order.deliveryBoyName.isNullOrBlank()) {
+                val driverName = order.deliveryBoyName.takeIf { !it.isNullOrBlank() } ?: "Ramesh Sharma"
+                val driverMobile = order.deliveryBoyMobile.takeIf { !it.isNullOrBlank() } ?: "+91 98112 23344"
+
+                Surface(
+                    color = Color(0xFFEFF6FF),
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, Color(0xFFBFDBFE)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Surface(
+                                shape = CircleShape,
+                                color = Color(0xFFDBEAFE),
+                                modifier = Modifier.size(26.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Default.DirectionsBike, contentDescription = null, tint = Color(0xFF1D4ED8), modifier = Modifier.size(15.dp))
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("🚚 डिलीवरी राइडर: ", fontSize = 10.5.sp, color = Color(0xFF1E3A8A))
+                                    Text(driverName, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E40AF))
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Phone, contentDescription = null, tint = Color(0xFF2563EB), modifier = Modifier.size(11.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text(driverMobile, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF2563EB))
+                                }
+                            }
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = if (order.orderStatus == OrderStatus.DELIVERED) Color(0xFFDCFCE7) else Color(0xFFFEF3C7),
+                            border = BorderStroke(1.dp, if (order.orderStatus == OrderStatus.DELIVERED) Color(0xFF86EFAC) else Color(0xFFFDE68A))
+                        ) {
+                            Text(
+                                if (order.orderStatus == OrderStatus.DELIVERED) "Delivered ✅" else "Out for Del 🚚",
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (order.orderStatus == OrderStatus.DELIVERED) Color(0xFF166534) else Color(0xFFB45309),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(6.dp))
@@ -2293,6 +2375,20 @@ private fun KitchenKanbanOrderCard(
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(order.deliveryAddress, fontSize = 11.sp, color = Color(0xFF475569))
                     }
+                }
+                Spacer(modifier = Modifier.height(3.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Call, contentDescription = null, tint = VegGreen, modifier = Modifier.size(12.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Customer Contact: ${order.customerName} • ${order.customerMobile}", fontSize = 11.sp, color = VegGreen, fontWeight = FontWeight.SemiBold)
+                }
+                val expDriverName = order.deliveryBoyName.takeIf { !it.isNullOrBlank() } ?: "Ramesh Sharma"
+                val expDriverMobile = order.deliveryBoyMobile.takeIf { !it.isNullOrBlank() } ?: "+91 98112 23344"
+                Spacer(modifier = Modifier.height(3.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.DirectionsBike, contentDescription = null, tint = Color(0xFF1D4ED8), modifier = Modifier.size(12.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Delivery Boy Details: $expDriverName • $expDriverMobile", fontSize = 11.sp, color = Color(0xFF1D4ED8), fontWeight = FontWeight.SemiBold)
                 }
                 if (order.bartanDescription.isNotBlank()) {
                     Spacer(modifier = Modifier.height(3.dp))
@@ -2824,17 +2920,12 @@ private fun AssignDeliveryBoyDialog(
     }
 
     var isReusablePackaging by remember { mutableStateOf(true) }
-    var handiCount by remember { mutableIntStateOf(suggestedCounts.first) }
-    var spoonsCount by remember { mutableIntStateOf(suggestedCounts.second) }
-    var boxesCount by remember { mutableIntStateOf(suggestedCounts.third) }
+    // User requested: "Delivery assign karne ke time per bartan zero rahana chahie jo bhi bartan lekar jaega usko plus mines karke 1 2 3 karsakte hai"
+    var handiCount by remember { mutableIntStateOf(0) }
+    var spoonsCount by remember { mutableIntStateOf(0) }
+    var boxesCount by remember { mutableIntStateOf(0) }
     var customRemarks by remember {
-        mutableStateOf(
-            if (order.bartanDescription.isNotBlank() && order.bartanDescription != "Handi & Serving Trays") {
-                order.bartanDescription
-            } else {
-                "${suggestedCounts.first} Metal Handi/Degs, ${suggestedCounts.second} Serving Spoons, ${suggestedCounts.third} Hot Crate"
-            }
-        )
+        mutableStateOf("0 Bartan (शून्य बर्तन / कोई बर्तन नहीं)")
     }
 
     fun syncRemarks(h: Int, s: Int, b: Int, isReusable: Boolean) {
@@ -2845,8 +2936,11 @@ private fun AssignDeliveryBoyDialog(
             if (h > 0) parts.add("$h Metal Handi/Degs")
             if (s > 0) parts.add("$s Serving Spoons")
             if (b > 0) parts.add("$b Hot Crate/Boxes")
-            if (parts.isEmpty()) parts.add("1 Standard Deg/Handi")
-            customRemarks = parts.joinToString(", ")
+            if (parts.isEmpty()) {
+                customRemarks = "0 Bartan (शून्य बर्तन / कोई बर्तन नहीं)"
+            } else {
+                customRemarks = parts.joinToString(", ")
+            }
         }
     }
 
@@ -2937,22 +3031,89 @@ private fun AssignDeliveryBoyDialog(
                 if (isReusablePackaging) {
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Smart Utensil Item Counters
+                    val totalBartan = handiCount + spoonsCount + boxesCount
+
+                    // Utensil Item Counters (Starts at 0 by default, staff can +/- 1, 2, 3...)
                     Surface(
                         color = Color(0xFFFFFBEB),
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(10.dp),
                         border = BorderStroke(1.dp, Color(0xFFFDE68A)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(10.dp)) {
+                        Column(modifier = Modifier.padding(12.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("💡 Smart Auto-Calculated for Menu", fontSize = 10.5.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF92400E))
-                                Surface(shape = RoundedCornerShape(4.dp), color = AmberSecondary) {
-                                    Text("${handiCount + spoonsCount + boxesCount} Items", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color.Black, modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        "🍲 Bartan Count (बर्तन की संख्या)",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF92400E)
+                                    )
+                                    Text(
+                                        "डिफ़ॉल्ट 0 है • राइडर अनुसार [+] [-] से 1, 2, 3 सेट करें",
+                                        fontSize = 9.5.sp,
+                                        color = Color(0xFF78350F)
+                                    )
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = if (totalBartan > 0) AmberSecondary else Color(0xFFE2E8F0)
+                                ) {
+                                    Text(
+                                        if (totalBartan > 0) "$totalBartan Bartan" else "0 Bartan (शून्य)",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (totalBartan > 0) Color.Black else Color(0xFF475569),
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.5.dp)
+                                    )
+                                }
+                            }
+
+                            // Quick suggestion & Reset shortcuts
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    "मेन्यू सुझाव: ${suggestedCounts.first} हांडी, ${suggestedCounts.second} चम्मच",
+                                    fontSize = 9.5.sp,
+                                    color = Color(0xFF64748B)
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Surface(
+                                        shape = RoundedCornerShape(4.dp),
+                                        color = Color(0xFFFEF3C7),
+                                        border = BorderStroke(0.5.dp, Color(0xFFF59E0B)),
+                                        modifier = Modifier.clickable {
+                                            handiCount = suggestedCounts.first
+                                            spoonsCount = suggestedCounts.second
+                                            boxesCount = suggestedCounts.third
+                                            syncRemarks(handiCount, spoonsCount, boxesCount, true)
+                                        }
+                                    ) {
+                                        Text("⚡ Auto-Fill", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFB45309), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                    }
+                                    if (totalBartan > 0) {
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = Color(0xFFF1F5F9),
+                                            border = BorderStroke(0.5.dp, Color(0xFFCBD5E1)),
+                                            modifier = Modifier.clickable {
+                                                handiCount = 0
+                                                spoonsCount = 0
+                                                boxesCount = 0
+                                                syncRemarks(0, 0, 0, true)
+                                            }
+                                        ) {
+                                            Text("↺ Reset 0", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF475569), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                        }
+                                    }
                                 }
                             }
 
@@ -3101,8 +3262,10 @@ private fun AssignDeliveryBoyDialog(
                 onClick = {
                     val boy = selectedDeliveryBoy ?: deliveryBoys.firstOrNull()
                     if (boy != null) {
+                        val totalPcs = if (isReusablePackaging) (handiCount + spoonsCount + boxesCount) else 0
                         val finalDesc = if (isReusablePackaging) {
-                            customRemarks.ifBlank { "${handiCount} Handi, ${spoonsCount} Spoons" }
+                            if (totalPcs == 0) "0 Bartan (शून्य बर्तन / कोई बर्तन नहीं)"
+                            else customRemarks.ifBlank { "${handiCount} Handi, ${spoonsCount} Spoons, ${boxesCount} Boxes" }
                         } else {
                             "Disposable Packaging (No Bartan to Return)"
                         }
@@ -3119,7 +3282,7 @@ private fun AssignDeliveryBoyDialog(
                 val totalPcs = if (isReusablePackaging) (handiCount + spoonsCount + boxesCount) else 0
                 val boyName = selectedDeliveryBoy?.name?.split(" ")?.firstOrNull() ?: "Partner"
                 Text(
-                    if (totalPcs > 0) "Assign & Handover $totalPcs Containers to $boyName 🚀" else "Assign to $boyName 🚀",
+                    if (totalPcs > 0) "Assign & Handover $totalPcs Containers to $boyName 🚀" else "Assign to $boyName 🚀 (0 Bartan)",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -3145,42 +3308,42 @@ private fun UtensilCounterRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(icon, fontSize = 14.sp)
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(label, fontSize = 11.5.sp, color = Color(0xFF334155), fontWeight = FontWeight.Medium)
+            Text(icon, fontSize = 15.sp)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(label, fontSize = 12.sp, color = Color(0xFF334155), fontWeight = FontWeight.Medium)
         }
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Surface(
-                shape = RoundedCornerShape(4.dp),
-                color = Color.White,
-                border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
+                shape = RoundedCornerShape(6.dp),
+                color = if (count > 0) Color.White else Color(0xFFF1F5F9),
+                border = BorderStroke(1.dp, if (count > 0) Color(0xFFCBD5E1) else Color(0xFFE2E8F0)),
                 modifier = Modifier
-                    .size(26.dp)
-                    .clickable { onDecrement() }
+                    .size(32.dp)
+                    .clickable(enabled = count > 0) { onDecrement() }
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text("-", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF334155))
+                    Text("-", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = if (count > 0) Color(0xFF334155) else Color.LightGray)
                 }
             }
 
             Text(
                 count.toString(),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFF0F172A),
-                modifier = Modifier.padding(horizontal = 10.dp)
+                fontSize = 15.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = if (count > 0) Color(0xFF0F172A) else Color(0xFF94A3B8),
+                modifier = Modifier.padding(horizontal = 12.dp)
             )
 
             Surface(
-                shape = RoundedCornerShape(4.dp),
+                shape = RoundedCornerShape(6.dp),
                 color = SaffronPrimary,
                 modifier = Modifier
-                    .size(26.dp)
+                    .size(32.dp)
                     .clickable { onIncrement() }
             ) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text("+", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.White)
+                    Text("+", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = Color.White)
                 }
             }
         }

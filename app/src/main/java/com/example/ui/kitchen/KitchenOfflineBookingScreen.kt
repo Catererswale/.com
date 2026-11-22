@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.print.PrintAttributes
 import android.print.PrintManager
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
@@ -46,6 +47,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Percent
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Remove
@@ -114,7 +116,9 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
     val menuItems by viewModel.menuItemsList.collectAsState()
     val ordersList by viewModel.ordersList.collectAsState()
     val caterersList by viewModel.caterersList.collectAsState()
-    val currentCaterer = caterersList.find { it.id == "caterer_1" } ?: caterersList.firstOrNull()
+    val selectedCatererId by viewModel.selectedCatererId.collectAsState()
+    val activeKitchenId = selectedCatererId ?: "caterer_1"
+    val currentCaterer = caterersList.find { it.id == activeKitchenId } ?: caterersList.firstOrNull()
     val isOfflineBookingEnabled = currentCaterer?.isOfflineBookingEnabled ?: true
 
     // Step state: 1 = Menu Selection (Category & Dishes), 2 = Customer & Booking Details, 3 = Receipt & Invoice
@@ -273,8 +277,10 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
         "Catering Add-ons" to "कैटरिंग सर्विस व सेटअप"
     )
 
-    val filteredMenuItems = remember(selectedCategory, selectedDietFilter, searchQuery, menuItems) {
-        menuItems.filter { item ->
+    val filteredMenuItems = remember(selectedCategory, selectedDietFilter, searchQuery, menuItems, currentCaterer) {
+        val targetCid = currentCaterer?.id ?: activeKitchenId
+        val sourceList = menuItems.filter { it.catererId == targetCid }.ifEmpty { menuItems }
+        sourceList.filter { item ->
             val matchCat = if (selectedCategory == "All") true else item.category.contains(selectedCategory, ignoreCase = true)
             val matchDiet = when (selectedDietFilter) {
                 "VEG" -> item.foodType == FoodType.VEG
@@ -895,23 +901,24 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                                             fontSize = 12.sp,
                                                             color = Color.Gray
                                                         )
-                                                        if (item.minQuantity > 1.0) {
-                                                            Spacer(modifier = Modifier.width(6.dp))
-                                                            Surface(color = Color(0xFFF1F5F9), shape = RoundedCornerShape(4.dp)) {
-                                                                val minQtyFormatted = if (item.minQuantity % 1.0 == 0.0) "${item.minQuantity.toInt()}" else String.format(java.util.Locale.ENGLISH, "%.1f", item.minQuantity)
-                                                                Text(
-                                                                    text = "Min $minQtyFormatted $unitLabel",
-                                                                    fontSize = 9.sp,
-                                                                    color = Color(0xFF475569),
-                                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                                                                )
-                                                            }
+                                                        Spacer(modifier = Modifier.width(6.dp))
+                                                        Surface(color = Color(0xFFF1F5F9), shape = RoundedCornerShape(4.dp)) {
+                                                            val minQtyFormatted = if (item.minQuantity % 1.0 == 0.0) "${item.minQuantity.toInt()}" else String.format(java.util.Locale.ENGLISH, "%.1f", item.minQuantity)
+                                                            val maxQtyFormatted = if (item.maxQuantity % 1.0 == 0.0) "${item.maxQuantity.toInt()}" else String.format(java.util.Locale.ENGLISH, "%.1f", item.maxQuantity)
+                                                            Text(
+                                                                text = "Min $minQtyFormatted • Max $maxQtyFormatted $unitLabel",
+                                                                fontSize = 9.sp,
+                                                                color = Color(0xFF475569),
+                                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                            )
                                                         }
                                                     }
                                                 }
                                             }
 
                                             // Item Action: Add or Stepper
+                                            val safeMin = item.minQuantity.coerceAtLeast(0.5)
+                                            val safeMax = item.maxQuantity.coerceAtLeast(safeMin)
                                             if (isInCart) {
                                                 val step = if (item.unitType == UnitType.KG || item.unitType == UnitType.LITRE) 0.5 else 1.0
                                                 val formattedQty = if (currentQty % 1.0 == 0.0) "${currentQty.toInt()}" else String.format(java.util.Locale.ENGLISH, "%.1f", currentQty)
@@ -928,8 +935,11 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                                             onClick = {
                                                                 val rawNext = currentQty - step
                                                                 val next = kotlin.math.round(rawNext * 10.0) / 10.0
-                                                                if (next <= 0.0) offlineCart.remove(item.id)
-                                                                else offlineCart[item.id] = next
+                                                                if (next < safeMin - 0.001) {
+                                                                    offlineCart.remove(item.id)
+                                                                } else {
+                                                                    offlineCart[item.id] = next.coerceIn(safeMin, safeMax)
+                                                                }
                                                             },
                                                             modifier = Modifier.size(28.dp)
                                                         ) {
@@ -948,7 +958,12 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                                             onClick = {
                                                                 val rawNext = currentQty + step
                                                                 val next = kotlin.math.round(rawNext * 10.0) / 10.0
-                                                                offlineCart[item.id] = next
+                                                                if (next <= safeMax + 0.001) {
+                                                                    offlineCart[item.id] = next.coerceIn(safeMin, safeMax)
+                                                                } else {
+                                                                    val maxFmt = if (safeMax % 1.0 == 0.0) "${safeMax.toInt()}" else "$safeMax"
+                                                                    Toast.makeText(context, "Maximum limit is $maxFmt $unitLabel", Toast.LENGTH_SHORT).show()
+                                                                }
                                                             },
                                                             modifier = Modifier.size(28.dp)
                                                         ) {
@@ -965,9 +980,10 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                                     )
                                                 }
                                             } else {
+                                                val initMinFmt = if (safeMin % 1.0 == 0.0) "${safeMin.toInt()}" else "$safeMin"
                                                 Button(
                                                     onClick = {
-                                                        offlineCart[item.id] = if (item.minQuantity >= 0.5) item.minQuantity else 1.0
+                                                        offlineCart[item.id] = safeMin
                                                     },
                                                     colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
                                                     shape = RoundedCornerShape(16.dp),
@@ -975,40 +991,46 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                                 ) {
                                                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
                                                     Spacer(modifier = Modifier.width(4.dp))
-                                                    Text("ADD (1 $unitLabel)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    Text("ADD ($initMinFmt $unitLabel)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                                 }
                                             }
                                         }
 
-                                        // Quick bulk deg & weight chips for catering (0.5kg, 1kg, 1.5kg, 2kg, 2.5kg, 3kg, 3.5kg, 5kg, 10kg, 15kg, 25kg, 50kg)
+                                        // Quick bulk deg & weight chips filtered to item's [minQuantity..maxQuantity]
                                         if (isInCart && item.unitType == UnitType.KG) {
-                                            Spacer(modifier = Modifier.height(8.dp))
-                                            Divider(color = Color(0xFFF1F5F9))
-                                            Spacer(modifier = Modifier.height(6.dp))
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .horizontalScroll(rememberScrollState()),
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Text("Qty / Degs:", fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
-                                                listOf(0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 10.0, 15.0, 25.0, 50.0).forEach { degQty ->
-                                                    val isDegSelected = kotlin.math.abs(currentQty - degQty) < 0.05
-                                                    val label = if (degQty % 1.0 == 0.0) "${degQty.toInt()} Kg" else "$degQty Kg"
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .clip(RoundedCornerShape(10.dp))
-                                                            .background(if (isDegSelected) SaffronPrimary else Color(0xFFF1F5F9))
-                                                            .clickable { offlineCart[item.id] = degQty }
-                                                            .padding(horizontal = 7.dp, vertical = 3.dp)
-                                                    ) {
-                                                        Text(
-                                                            text = label,
-                                                            fontSize = 10.sp,
-                                                            fontWeight = if (isDegSelected) FontWeight.Bold else FontWeight.Normal,
-                                                            color = if (isDegSelected) Color.White else Color(0xFF475569)
-                                                        )
+                                            val safeMin = item.minQuantity.coerceAtLeast(0.5)
+                                            val safeMax = item.maxQuantity.coerceAtLeast(safeMin)
+                                            val validChips = listOf(0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 10.0, 15.0, 25.0, 50.0)
+                                                .filter { it >= safeMin - 0.001 && it <= safeMax + 0.001 }
+                                            if (validChips.isNotEmpty()) {
+                                                Spacer(modifier = Modifier.height(8.dp))
+                                                Divider(color = Color(0xFFF1F5F9))
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .horizontalScroll(rememberScrollState()),
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text("Qty / Degs:", fontSize = 10.sp, color = Color.Gray, fontWeight = FontWeight.Bold)
+                                                    validChips.forEach { degQty ->
+                                                        val isDegSelected = kotlin.math.abs(currentQty - degQty) < 0.05
+                                                        val label = if (degQty % 1.0 == 0.0) "${degQty.toInt()} Kg" else "$degQty Kg"
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .clip(RoundedCornerShape(10.dp))
+                                                                .background(if (isDegSelected) SaffronPrimary else Color(0xFFF1F5F9))
+                                                                .clickable { offlineCart[item.id] = degQty.coerceIn(safeMin, safeMax) }
+                                                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = label,
+                                                                fontSize = 10.sp,
+                                                                fontWeight = if (isDegSelected) FontWeight.Bold else FontWeight.Normal,
+                                                                color = if (isDegSelected) Color.White else Color(0xFF475569)
+                                                            )
+                                                        }
                                                     }
                                                 }
                                             }
@@ -1632,94 +1654,184 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
 
                                     Spacer(modifier = Modifier.height(10.dp))
 
-                                    // List of available add-ons with quick selection toggles/counters
-                                    availableAddonServices.forEach { addOn ->
-                                        val currentQty = selectedAddOns[addOn.id] ?: 0.0
-                                        val isSelected = currentQty > 0
+                                    // Left-Right Slider Carousel for Add-On Services (बाएं-दाएं स्लाइडर)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "👉 Slide left-right to choose services (बाएं-दाएं स्लाइड करें):",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = Color(0xFF64748B)
+                                        )
+                                        Text(
+                                            text = "${availableAddonServices.size} Items",
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF0284C7)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(6.dp))
 
-                                        Surface(
-                                            color = if (isSelected) Color(0xFFF0FDF4) else Color(0xFFF8FAFC),
-                                            shape = RoundedCornerShape(10.dp),
-                                            border = androidx.compose.foundation.BorderStroke(
-                                                if (isSelected) 1.5.dp else 1.dp,
-                                                if (isSelected) VegGreen else Color(0xFFE2E8F0)
-                                            ),
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = 4.dp)
-                                        ) {
-                                            Row(
+                                    LazyRow(
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        contentPadding = PaddingValues(horizontal = 2.dp, vertical = 4.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        items(availableAddonServices, key = { it.id }) { addOn ->
+                                            val currentQty = selectedAddOns[addOn.id] ?: 0.0
+                                            val isSelected = currentQty > 0
+
+                                            Surface(
+                                                color = if (isSelected) Color(0xFFF0FDF4) else Color.White,
+                                                shape = RoundedCornerShape(12.dp),
+                                                border = androidx.compose.foundation.BorderStroke(
+                                                    if (isSelected) 1.5.dp else 1.dp,
+                                                    if (isSelected) VegGreen else Color(0xFFE2E8F0)
+                                                ),
+                                                shadowElevation = 1.dp,
                                                 modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(10.dp),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
+                                                    .width(240.dp)
+                                                    .padding(vertical = 2.dp)
                                             ) {
-                                                Row(
-                                                    modifier = Modifier.weight(1f),
-                                                    verticalAlignment = Alignment.CenterVertically
+                                                Column(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(12.dp)
                                                 ) {
-                                                    Text(addOn.icon, fontSize = 22.sp)
-                                                    Spacer(modifier = Modifier.width(10.dp))
-                                                    Column {
-                                                        Text(
-                                                            text = addOn.name,
-                                                            fontWeight = FontWeight.Bold,
-                                                            fontSize = 13.sp,
-                                                            color = Color(0xFF1E293B)
-                                                        )
-                                                        Text(
-                                                            text = "${addOn.hindiName} • ₹${addOn.price.toInt()} / ${addOn.unit} (${addOn.servesText})",
-                                                            fontSize = 11.sp,
-                                                            color = if (isSelected) VegGreen else Color(0xFF64748B),
-                                                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                                                        )
-                                                    }
-                                                }
-
-                                                if (isSelected) {
-                                                    Surface(
-                                                        color = VegGreen,
-                                                        shape = RoundedCornerShape(14.dp)
+                                                    // Header Row: Icon + Names
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        verticalAlignment = Alignment.Top
                                                     ) {
-                                                        Row(
-                                                            verticalAlignment = Alignment.CenterVertically,
-                                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(40.dp)
+                                                                .clip(CircleShape)
+                                                                .background(if (isSelected) Color(0xFFDCFCE7) else Color(0xFFFFF7ED)),
+                                                            contentAlignment = Alignment.Center
                                                         ) {
-                                                            IconButton(
-                                                                onClick = {
-                                                                    if (currentQty <= 1.0) selectedAddOns.remove(addOn.id)
-                                                                    else selectedAddOns[addOn.id] = currentQty - 1.0
-                                                                },
-                                                                modifier = Modifier.size(24.dp)
-                                                            ) {
-                                                                Icon(Icons.Default.Remove, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
-                                                            }
+                                                            Text(addOn.icon, fontSize = 22.sp)
+                                                        }
+                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                        Column(modifier = Modifier.weight(1f)) {
                                                             Text(
-                                                                text = "${currentQty.toInt()}",
-                                                                color = Color.White,
-                                                                fontSize = 12.sp,
+                                                                text = addOn.name,
                                                                 fontWeight = FontWeight.Bold,
-                                                                modifier = Modifier.padding(horizontal = 6.dp)
+                                                                fontSize = 13.5.sp,
+                                                                color = Color(0xFF0F172A),
+                                                                maxLines = 1,
+                                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                                             )
-                                                            IconButton(
-                                                                onClick = { selectedAddOns[addOn.id] = currentQty + 1.0 },
-                                                                modifier = Modifier.size(24.dp)
-                                                            ) {
-                                                                Icon(Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
-                                                            }
+                                                            Text(
+                                                                text = addOn.hindiName,
+                                                                fontSize = 11.5.sp,
+                                                                fontWeight = FontWeight.SemiBold,
+                                                                color = Color(0xFF9A3412),
+                                                                maxLines = 1,
+                                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                            )
                                                         }
                                                     }
-                                                } else {
-                                                    OutlinedButton(
-                                                        onClick = { selectedAddOns[addOn.id] = 1.0 },
-                                                        shape = RoundedCornerShape(10.dp),
-                                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = VegGreen),
-                                                        border = androidx.compose.foundation.BorderStroke(1.dp, VegGreen),
-                                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                                                        modifier = Modifier.height(30.dp)
+
+                                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                                    // Price and serves badge
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
                                                     ) {
-                                                        Text("+ Add", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                        Text(
+                                                            text = "₹${addOn.price.toInt()}",
+                                                            fontWeight = FontWeight.ExtraBold,
+                                                            fontSize = 15.sp,
+                                                            color = VegGreen
+                                                        )
+                                                        Surface(
+                                                            color = Color(0xFFF1F5F9),
+                                                            shape = RoundedCornerShape(4.dp),
+                                                            border = androidx.compose.foundation.BorderStroke(0.5.dp, Color(0xFFCBD5E1))
+                                                        ) {
+                                                            Text(
+                                                                text = "/ ${addOn.unit}",
+                                                                fontSize = 10.5.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = Color(0xFF334155),
+                                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                            )
+                                                        }
+                                                    }
+
+                                                    if (addOn.servesText.isNotBlank()) {
+                                                        Spacer(modifier = Modifier.height(4.dp))
+                                                        Text(
+                                                            text = "• ${addOn.servesText}",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                            color = Color(0xFF475569),
+                                                            maxLines = 1,
+                                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                        )
+                                                    }
+
+                                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                                    // Quantity Counter or Add Button
+                                                    if (isSelected) {
+                                                        Surface(
+                                                            color = VegGreen,
+                                                            shape = RoundedCornerShape(12.dp),
+                                                            modifier = Modifier.fillMaxWidth()
+                                                        ) {
+                                                            Row(
+                                                                verticalAlignment = Alignment.CenterVertically,
+                                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                                modifier = Modifier
+                                                                    .fillMaxWidth()
+                                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                            ) {
+                                                                IconButton(
+                                                                    onClick = {
+                                                                        if (currentQty <= 1.0) selectedAddOns.remove(addOn.id)
+                                                                        else selectedAddOns[addOn.id] = currentQty - 1.0
+                                                                    },
+                                                                    modifier = Modifier.size(28.dp)
+                                                                ) {
+                                                                    Icon(Icons.Default.Remove, contentDescription = "Decrease", tint = Color.White, modifier = Modifier.size(14.dp))
+                                                                }
+                                                                Text(
+                                                                    text = "${currentQty.toInt()} Added",
+                                                                    color = Color.White,
+                                                                    fontSize = 12.5.sp,
+                                                                    fontWeight = FontWeight.Bold
+                                                                )
+                                                                IconButton(
+                                                                    onClick = { selectedAddOns[addOn.id] = currentQty + 1.0 },
+                                                                    modifier = Modifier.size(28.dp)
+                                                                ) {
+                                                                    Icon(Icons.Default.Add, contentDescription = "Increase", tint = Color.White, modifier = Modifier.size(14.dp))
+                                                                }
+                                                            }
+                                                        }
+                                                    } else {
+                                                        OutlinedButton(
+                                                            onClick = { selectedAddOns[addOn.id] = 1.0 },
+                                                            shape = RoundedCornerShape(10.dp),
+                                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = VegGreen),
+                                                            border = androidx.compose.foundation.BorderStroke(1.dp, VegGreen),
+                                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .height(34.dp)
+                                                                .testTag("slider_addon_add_${addOn.id}")
+                                                        ) {
+                                                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                            Spacer(modifier = Modifier.width(4.dp))
+                                                            Text("+ Add", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                                        }
                                                     }
                                                 }
                                             }
@@ -2576,6 +2688,7 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                         catererDiscountAmount = calculatedDiscount,
                                         isOfflineBooking = true,
                                         customAdvanceAmount = finalAdvance,
+                                        customOrderId = invId,
                                         onSuccess = {}
                                     )
 
@@ -2601,6 +2714,119 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
                                 )
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // HOLD ORDER BUTTON (जब आर्डर अभी कन्फर्म नहीं हुआ / Quotation / Enquiry Hold)
+                            OutlinedButton(
+                                onClick = {
+                                    val summaryList = mutableListOf<String>()
+                                    var sNo = 1
+                                    offlineCart.forEach { (itemId, qty) ->
+                                        val mItem = menuItems.find { it.id == itemId }
+                                        if (mItem != null) {
+                                            val lineTot = mItem.pricePerUnit * qty
+                                            summaryList.add("$sNo. ${mItem.name} (${qty.toInt()} ${mItem.unitType}) = ₹${String.format(java.util.Locale.ENGLISH, "%.2f", lineTot)}")
+                                            sNo++
+                                        }
+                                    }
+                                    customCartItems.forEach { (cName, cPrice) ->
+                                        summaryList.add("$sNo. $cName (Custom Item) = ₹${String.format(java.util.Locale.ENGLISH, "%.2f", cPrice)}")
+                                        sNo++
+                                    }
+                                    selectedAddOns.forEach { (addOnId, qty) ->
+                                        val addOn = availableAddonServices.find { it.id == addOnId }
+                                        if (addOn != null) {
+                                            val addOnTot = addOn.price * qty
+                                            summaryList.add("$sNo. ${addOn.icon} ${addOn.name} (${qty.toInt()}x @ ₹${addOn.price.toInt()}) = ₹${String.format(java.util.Locale.ENGLISH, "%.2f", addOnTot)}")
+                                            sNo++
+                                        }
+                                    }
+                                    customAddonItems.forEach { (aName, aPrice) ->
+                                        summaryList.add("$sNo. ✨ $aName (Add-on Service) = ₹${String.format(java.util.Locale.ENGLISH, "%.2f", aPrice)}")
+                                        sNo++
+                                    }
+                                    val finalSummary = if (summaryList.isNotEmpty()) summaryList.joinToString("\n") else "1. Catering Booking Enquiry = ₹0.00"
+
+                                    val holdId = "HOLD-2026-${(1000..9999).random()}"
+                                    val finalTotal = if (finalNetBillAmount > 0) finalNetBillAmount else (totalCartAmount - calculatedDiscount).coerceAtLeast(0.0)
+                                    val finalAdvance = actualAdvancePaid
+                                    val finalBal = (finalTotal - finalAdvance).coerceAtLeast(0.0)
+
+                                    val orderObj = OrderEntity(
+                                        orderId = holdId,
+                                        customerName = if (customerName.isNotBlank()) customerName.trim() else "Offline Enquiry",
+                                        customerMobile = if (customerMobile.isNotBlank()) customerMobile.trim() else "+91 98765 43210",
+                                        deliveryAddress = if (customerAddress.isNotBlank()) customerAddress.trim() else "Local Venue / TBD",
+                                        catererId = "caterer_1",
+                                        catererName = "A1 Huma Caterers",
+                                        itemsSummary = finalSummary,
+                                        totalAmount = finalTotal,
+                                        advancePaidAmount = finalAdvance,
+                                        balanceAmount = finalBal,
+                                        paymentMethod = selectedPaymentMethod,
+                                        paymentStatus = PaymentStatus.BALANCE_PENDING,
+                                        orderStatus = OrderStatus.ON_HOLD,
+                                        deliveryDate = eventDate,
+                                        deliveryTimeSlot = eventTimeSlot,
+                                        catererOrderDiscountAmount = calculatedDiscount,
+                                        isOfflineBooking = true,
+                                        cashCollectedByDeliveryBoy = 0.0,
+                                        isCashSubmittedToKitchen = false
+                                    )
+
+                                    viewModel.placeOrder(
+                                        customerName = if (customerName.isNotBlank()) customerName.trim() else "Offline Enquiry",
+                                        customerMobile = if (customerMobile.isNotBlank()) customerMobile.trim() else "+91 98765 43210",
+                                        address = if (customerAddress.isNotBlank()) customerAddress.trim() else "Local Venue / TBD",
+                                        catererId = "caterer_1",
+                                        catererName = "A1 Huma Caterers",
+                                        itemsSummary = finalSummary,
+                                        totalAmount = finalTotal,
+                                        is30PercentAdvance = false,
+                                        paymentMethod = selectedPaymentMethod,
+                                        deliveryDate = eventDate,
+                                        deliveryTimeSlot = eventTimeSlot,
+                                        catererDiscountAmount = calculatedDiscount,
+                                        isOfflineBooking = true,
+                                        customAdvanceAmount = finalAdvance,
+                                        orderStatus = OrderStatus.ON_HOLD,
+                                        customOrderId = holdId,
+                                        onSuccess = {}
+                                    )
+
+                                    generatedInvoiceOrder = orderObj
+                                    currentStep = 3
+                                    Toast.makeText(context, "⏸️ Booking #$holdId Placed on HOLD! (ऑर्डर होल्ड पर रखा गया)", Toast.LENGTH_LONG).show()
+                                },
+                                enabled = isOfflineBookingEnabled,
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = Color(0xFFFFFBEB),
+                                    contentColor = Color(0xFF92400E)
+                                ),
+                                border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFF59E0B)),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp)
+                                    .testTag("hold_offline_order_button")
+                            ) {
+                                Icon(Icons.Default.Pause, contentDescription = null, tint = Color(0xFFD97706), modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(
+                                        text = "⏸️ HOLD ORDER (ऑर्डर होल्ड पर रखें)",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.5.sp,
+                                        color = Color(0xFF92400E)
+                                    )
+                                    Text(
+                                        text = "ऑर्डर अभी कन्फर्म नहीं हुआ (Quotation / Enquiry on Hold)",
+                                        fontSize = 10.sp,
+                                        color = Color(0xFFB45309)
+                                    )
+                                }
                             }
                             Spacer(modifier = Modifier.height(24.dp))
                         }
@@ -2691,17 +2917,80 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                                 Text("FSSAI Lic No: 23319008000123", fontSize = 11.sp, color = Color.Gray)
                                                 Text("Okhla Phase 3, Jamia Nagar, New Delhi", fontSize = 11.sp, color = Color.Gray)
                                             }
+                                            if (invOrder.orderStatus == OrderStatus.ON_HOLD) {
+                                                Surface(
+                                                    color = Color(0xFFFEF3C7),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF59E0B))
+                                                ) {
+                                                    Text(
+                                                        "⏸️ ON HOLD (होल्ड)",
+                                                        color = Color(0xFFB45309),
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 12.sp,
+                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                    )
+                                                }
+                                            } else {
+                                                Surface(
+                                                    color = Color(0xFFE8F5E9),
+                                                    shape = RoundedCornerShape(8.dp)
+                                                ) {
+                                                    Text(
+                                                        "BOOKED ✅",
+                                                        color = VegGreen,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 12.sp,
+                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        if (invOrder.orderStatus == OrderStatus.ON_HOLD) {
                                             Surface(
-                                                color = Color(0xFFE8F5E9),
-                                                shape = RoundedCornerShape(8.dp)
+                                                color = Color(0xFFFFFBEB),
+                                                shape = RoundedCornerShape(10.dp),
+                                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDE68A)),
+                                                modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
                                             ) {
-                                                Text("BOOKED ✅", color = VegGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                                                Column(modifier = Modifier.padding(12.dp)) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Text("⏸️", fontSize = 18.sp)
+                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                        Column {
+                                                            Text("यह बुकिंग होल्ड पर रखी गई है (Quotation / Enquiry)", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = Color(0xFF92400E))
+                                                            Text("ऑर्डर अभी पक्का नहीं हुआ है। जब ग्राहक कन्फर्म करे तो नीचे 'Confirm Order Now' दबाएं।", fontSize = 10.5.sp, color = Color(0xFF78350F))
+                                                        }
+                                                    }
+                                                    Spacer(modifier = Modifier.height(10.dp))
+                                                    Button(
+                                                        onClick = {
+                                                            viewModel.updateOrderStatus(invOrder.orderId, OrderStatus.CONFIRMED)
+                                                            generatedInvoiceOrder = invOrder.copy(orderStatus = OrderStatus.CONFIRMED)
+                                                            Toast.makeText(context, "🟢 Order #${invOrder.orderId} Confirmed & Moved to Confirmed Orders!", Toast.LENGTH_LONG).show()
+                                                        },
+                                                        colors = ButtonDefaults.buttonColors(containerColor = VegGreen),
+                                                        shape = RoundedCornerShape(8.dp),
+                                                        modifier = Modifier.fillMaxWidth().height(42.dp)
+                                                    ) {
+                                                        Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                        Spacer(modifier = Modifier.width(6.dp))
+                                                        Text("Confirm Order Now (अभी ऑर्डर पक्का करें) 🟢", fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
+                                                    }
+                                                }
                                             }
                                         }
 
                                         Divider(modifier = Modifier.padding(vertical = 12.dp))
 
-                                        Text("INVOICE / RECEIPT: #${generatedInvoiceId}", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF333333))
+                                        Text(
+                                            if (invOrder.orderStatus == OrderStatus.ON_HOLD) "QUOTATION / HOLD RECEIPT: #${invOrder.orderId}"
+                                            else "INVOICE / RECEIPT: #${invOrder.orderId}",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            color = if (invOrder.orderStatus == OrderStatus.ON_HOLD) Color(0xFFB45309) else Color(0xFF333333)
+                                        )
                                         Spacer(modifier = Modifier.height(8.dp))
 
                                         Row(modifier = Modifier.fillMaxWidth()) {
@@ -2918,10 +3207,14 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
                                             "*SUBTOTAL:* ₹${String.format("%.2f", originalSubtotalVal)}\n*SPECIAL DISCOUNT:* -₹${String.format("%.2f", invOrder.catererOrderDiscountAmount)} 🏷️\n"
                                         } else ""
 
+                                        val isHoldMode = invOrder.orderStatus == OrderStatus.ON_HOLD
+                                        val invoiceHeading = if (isHoldMode) "*A1 HUMA CATERERS - CATERING QUOTATION (कोटेशन)*\n*Status:* ⏸️ ON HOLD (Pending Customer Confirmation)" else "*A1 HUMA CATERERS - BOOKING INVOICE*"
+                                        val invoiceDocRef = if (isHoldMode) "*Quotation / Hold #:* ${invOrder.orderId}" else "*Invoice #:* ${invOrder.orderId}"
+
                                         val invoiceText = """
-                                            *A1 HUMA CATERERS - BOOKING INVOICE*
+                                            $invoiceHeading
                                             ---------------------------------------
-                                            *Invoice #:* ${generatedInvoiceId}
+                                            $invoiceDocRef
                                             *Customer:* ${invOrder.customerName} (${invOrder.customerMobile})
                                             *Event Date:* ${invOrder.deliveryDate}
                                             *Time Slot:* ${invOrder.deliveryTimeSlot}
@@ -2931,11 +3224,11 @@ fun KitchenOfflineBookingScreen(viewModel: CaterersViewModel) {
 ${invOrder.itemsSummary}
                                             ---------------------------------------
                                             ${discountLines}*PAYMENT TERMS:* ${if (invOrder.paymentMethod == PaymentMethod.CASH_ON_DELIVERY) "Cash on Delivery (COD 🚚)" else invOrder.paymentMethod.name}
-                                            *TOTAL BILL:* ₹${String.format(java.util.Locale.ENGLISH, "%.2f", invOrder.totalAmount)}
-                                            *ADVANCE RECEIVED:* ₹${String.format(java.util.Locale.ENGLISH, "%.2f", invOrder.advancePaidAmount)} ${if (invOrder.advancePaidAmount > 0) "✅" else "(COD)"}
-                                            *REMAINING BALANCE:* ₹${String.format(java.util.Locale.ENGLISH, "%.2f", invOrder.balanceAmount)} ${if (invOrder.paymentMethod == PaymentMethod.CASH_ON_DELIVERY && invOrder.balanceAmount > 0) "(Collect on Delivery 🚚)" else "⏳"}
+                                            *TOTAL ESTIMATE:* ₹${String.format(java.util.Locale.ENGLISH, "%.2f", invOrder.totalAmount)}
+                                            *ADVANCE PAID:* ₹${String.format(java.util.Locale.ENGLISH, "%.2f", invOrder.advancePaidAmount)} ${if (invOrder.advancePaidAmount > 0) "✅" else "(None)"}
+                                            *BALANCE DUE:* ₹${String.format(java.util.Locale.ENGLISH, "%.2f", invOrder.balanceAmount)} ${if (invOrder.paymentMethod == PaymentMethod.CASH_ON_DELIVERY && invOrder.balanceAmount > 0) "(Collect on Delivery 🚚)" else "⏳"}
                                             ---------------------------------------
-                                            Thank you for booking with A1 Huma Caterers!
+                                            ${if (isHoldMode) "This quotation is reserved on hold. Contact us to confirm your booking!" else "Thank you for booking with A1 Huma Caterers!"}
                                             FSSAI Lic: 23319008000123
                                         """.trimIndent()
 
@@ -2955,7 +3248,7 @@ ${invOrder.itemsSummary}
                                                     val waUri = Uri.parse("https://api.whatsapp.com/send?phone=$formattedPhone&text=$encodedText")
                                                     val waIntent = Intent(Intent.ACTION_VIEW, waUri)
                                                     context.startActivity(waIntent)
-                                                    Toast.makeText(context, "📲 Opening WhatsApp (Bill copied to clipboard)", Toast.LENGTH_SHORT).show()
+                                                    Toast.makeText(context, "📲 Opening WhatsApp (Copied to clipboard)", Toast.LENGTH_SHORT).show()
                                                 } catch (e: Exception) {
                                                     try {
                                                         val sendIntent = Intent(Intent.ACTION_SEND).apply {
@@ -2964,17 +3257,22 @@ ${invOrder.itemsSummary}
                                                         }
                                                         context.startActivity(Intent.createChooser(sendIntent, "Share WhatsApp Invoice"))
                                                     } catch (e2: Exception) {
-                                                        Toast.makeText(context, "📋 Bill copied to clipboard! (व्हाट्सएप पर पेस्ट करें)", Toast.LENGTH_LONG).show()
+                                                        Toast.makeText(context, "📋 Copied to clipboard! (व्हाट्सएप पर पेस्ट करें)", Toast.LENGTH_LONG).show()
                                                     }
                                                 }
                                             },
-                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                                            colors = ButtonDefaults.buttonColors(containerColor = if (isHoldMode) Color(0xFF0284C7) else Color(0xFF2E7D32)),
                                             shape = RoundedCornerShape(10.dp),
                                             modifier = Modifier.fillMaxWidth().height(48.dp).testTag("share_whatsapp_bill")
                                         ) {
                                             Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                                             Spacer(modifier = Modifier.width(8.dp))
-                                            Text("📲 Share WhatsApp Bill (व्हाट्सएप बिल भेजें)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                            Text(
+                                                if (isHoldMode) "📲 Share Quotation on WhatsApp (कोटेशन भेजें)"
+                                                else "📲 Share WhatsApp Bill (व्हाट्सएप बिल भेजें)",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp
+                                            )
                                         }
 
                                         Spacer(modifier = Modifier.height(10.dp))
@@ -3083,12 +3381,12 @@ ${invOrder.itemsSummary}
                                                             </body></html>
                                                         """.trimIndent()
 
-                                                        val webView = WebView(context).apply {
-                                                            webViewClient = object : WebViewClient() {
-                                                                override fun onPageFinished(view: WebView?, url: String?) {
-                                                                    val printAdapter = createPrintDocumentAdapter(jobName)
-                                                                    printManager?.print(jobName, printAdapter, PrintAttributes.Builder().build())
-                                                                }
+                                                        val webView = WebView(context)
+                                                        webView.settings.cacheMode = WebSettings.LOAD_NO_CACHE
+                                                        webView.webViewClient = object : WebViewClient() {
+                                                            override fun onPageFinished(view: WebView?, url: String?) {
+                                                                val printAdapter = webView.createPrintDocumentAdapter(jobName)
+                                                                printManager?.print(jobName, printAdapter, PrintAttributes.Builder().build())
                                                             }
                                                         }
                                                         webView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)

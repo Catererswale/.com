@@ -277,7 +277,7 @@ object TimeSlotUtils {
                 kitchenSettlementAmount = kitchenSettlement,
                 companyAdsFundAmount = commission,
                 canReschedule = false,
-                policyExplanation = "Same-day delivery: 0% customer refund. ₹${kitchenSettlement.toInt()} settled to kitchen minus 10% commission."
+                policyExplanation = "Same-day delivery: 0% customer refund as raw material preparation is already in progress."
             )
         }
 
@@ -294,7 +294,7 @@ object TimeSlotUtils {
                     kitchenSettlementAmount = 0.0,
                     companyAdsFundAmount = 0.0,
                     canReschedule = true,
-                    policyExplanation = ">24 hours before delivery: 100% full refund (₹${advance.toInt()}). Kitchen alerted via siren to cancel."
+                    policyExplanation = ">24 hours before delivery: 100% full refund (₹${advance.toInt()}) will be credited to your account."
                 )
             }
             hoursRemaining >= 12.0 -> {
@@ -307,7 +307,7 @@ object TimeSlotUtils {
                     kitchenSettlementAmount = 0.0,
                     companyAdsFundAmount = advance,
                     canReschedule = true,
-                    policyExplanation = "12-24 hours before delivery: No cash refund. Reschedule within 7 days with 100% payment lock, OR forfeit advance to Company Ads & Offers Fund."
+                    policyExplanation = "12–24 hours before delivery: No cash refund. You can reschedule to any date in the next 7 days without losing your advance."
                 )
             }
             else -> {
@@ -320,7 +320,7 @@ object TimeSlotUtils {
                     kitchenSettlementAmount = kitchenSettlement,
                     companyAdsFundAmount = commission,
                     canReschedule = false,
-                    policyExplanation = "<12 hours before delivery: 0% refund to customer. ₹${kitchenSettlement.toInt()} settled to kitchen minus 10% commission for ingredients."
+                    policyExplanation = "<12 hours before delivery: 0% customer refund as the kitchen has already started cooking."
                 )
             }
         }

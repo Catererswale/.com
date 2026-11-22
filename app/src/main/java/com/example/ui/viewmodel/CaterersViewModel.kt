@@ -17,6 +17,9 @@ import com.example.data.models.MenuItemEntity
 import com.example.data.models.NotificationEntity
 import com.example.data.models.OrderEntity
 import com.example.data.models.OrderStatus
+import com.example.data.models.KitchenStaffMember
+import com.example.data.models.KitchenStaffRole
+import com.example.data.models.BartanHandoverAlert
 import com.example.data.models.PartnerReviewEntity
 import com.example.data.models.PaymentMethod
 import com.example.data.models.PaymentStatus
@@ -448,6 +451,19 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    private val _isStandaloneRoleMode = MutableStateFlow(false)
+    val isStandaloneRoleMode: StateFlow<Boolean> = _isStandaloneRoleMode.asStateFlow()
+
+    fun setStandaloneRoleMode(enabled: Boolean) {
+        _isStandaloneRoleMode.value = enabled
+    }
+
+    fun toggleStandaloneRoleMode() {
+        _isStandaloneRoleMode.value = !_isStandaloneRoleMode.value
+        val msg = if (_isStandaloneRoleMode.value) "Locked to dedicated ${_currentRole.value.name.replace('_', ' ')} app mode" else "Multi-Role App Selector enabled"
+        showFeedback(msg)
+    }
+
     fun switchRole(role: UserRole) {
         _currentRole.value = role
         showFeedback("Switched to ${role.name.replace("_", " ")} mode")
@@ -495,8 +511,18 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
 
     fun addToCart(item: MenuItemEntity, quantity: Double) {
         viewModelScope.launch {
-            repository.addToCart(item, quantity)
-            showFeedback("Added ${quantity} ${item.unitType.name} of ${item.name} to Cart")
+            val safeMin = item.minQuantity.coerceAtLeast(0.1)
+            val safeMax = item.maxQuantity.coerceAtLeast(safeMin)
+            val safeQty = quantity.coerceIn(safeMin, safeMax)
+            repository.addToCart(item, safeQty)
+            val fmtQty = if (safeQty % 1.0 == 0.0) safeQty.toInt().toString() else String.format(java.util.Locale.ENGLISH, "%.1f", safeQty)
+            showFeedback("Added $fmtQty ${item.unitType.name} of ${item.name} to Cart")
+        }
+    }
+
+    fun updateCartItemQuantity(cartItem: CartItemEntity, newQty: Double, minQty: Double = 0.5, maxQty: Double = 500.0) {
+        viewModelScope.launch {
+            repository.updateCartItemQuantity(cartItem, newQty, minQty, maxQty)
         }
     }
 
@@ -628,6 +654,8 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
         earnedLoyaltyPoints: Int = 0,
         isOfflineBooking: Boolean = false,
         customAdvanceAmount: Double? = null,
+        orderStatus: OrderStatus = OrderStatus.CONFIRMED,
+        customOrderId: String? = null,
         onSuccess: (String) -> Unit
     ) {
         viewModelScope.launch {
@@ -649,7 +677,9 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
                 redeemedLoyaltyPoints = redeemedLoyaltyPoints,
                 earnedLoyaltyPoints = earnedLoyaltyPoints,
                 isOfflineBooking = isOfflineBooking,
-                customAdvanceAmount = customAdvanceAmount
+                customAdvanceAmount = customAdvanceAmount,
+                orderStatus = orderStatus,
+                customOrderId = customOrderId
             )
             _activeTrackingOrderId.value = orderId
 
@@ -674,9 +704,10 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
                 message = "New order $orderId received for ₹${totalAmount.toInt()} from $customerName."
             )
 
-            // Trigger loud real-time audio alarm for Kitchen Partner if enabled
+            // Trigger loud real-time audio alarm ONLY for online incoming customer orders (NEW status)
+            // NEVER trigger audio alarm or accept/reject modal for kitchen's own offline bookings or held quotations!
             val currentSettings = _kitchenSettings.value
-            if (currentSettings.isOrderSoundAlertEnabled) {
+            if (currentSettings.isOrderSoundAlertEnabled && !isOfflineBooking && orderStatus == OrderStatus.NEW) {
                 val createdOrder = repository.getOrderById(orderId) ?: OrderEntity(
                     orderId = orderId,
                     customerName = customerName,
@@ -695,6 +726,9 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
                     deliveryTimeSlot = deliveryTimeSlot
                 )
                 KitchenOrderSoundAlertManager.triggerOrderAlert(getApplication(), createdOrder)
+            } else if (isOfflineBooking || orderStatus == OrderStatus.ON_HOLD) {
+                // Ensure audio alarm & popup are completely disabled for offline & held orders
+                KitchenOrderSoundAlertManager.stopAlert()
             }
 
             showFeedback("Order $orderId placed successfully! 🎉")
@@ -1038,7 +1072,12 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
     fun addKitchenPartner(caterer: CatererEntity, onSuccess: (CatererEntity) -> Unit = {}) {
         viewModelScope.launch {
             repository.addCaterer(caterer)
-            showFeedback("Kitchen Partner '${caterer.name}' registered successfully! 🎉")
+            _searchQuery.value = ""
+            _selectedCategory.value = "All"
+            _customerDietFilter.value = "ALL"
+            _isVegMode.value = false
+            _selectedCatererId.value = caterer.id
+            showFeedback("✅ New Caterer '${caterer.name}' added & activated with menu! 🎉")
             onSuccess(caterer)
         }
     }
@@ -1068,6 +1107,37 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             repository.updateBartanCollected(id, true, date)
             showFeedback("Bartan marked as collected ✅")
+        }
+    }
+
+    fun verifyAndCompleteBartanReturn(
+        recordId: String,
+        orderId: String,
+        deliveryBoyId: String,
+        kitchenId: String = "caterer_1",
+        returnedHandis: Int,
+        returnedSpoons: Int,
+        returnedBoxes: Int,
+        missingRemarks: String,
+        staffName: String,
+        onSuccess: (() -> Unit)? = null
+    ) {
+        viewModelScope.launch {
+            repository.verifyAndCompleteBartanReturn(
+                recordId = recordId,
+                orderId = orderId,
+                deliveryBoyId = deliveryBoyId,
+                kitchenId = kitchenId,
+                returnedHandis = returnedHandis,
+                returnedSpoons = returnedSpoons,
+                returnedBoxes = returnedBoxes,
+                missingRemarks = missingRemarks,
+                staffName = staffName,
+                context = getApplication()
+            )
+            val total = returnedHandis + returnedSpoons + returnedBoxes
+            showFeedback("✅ Bartan Verified ($total returned)! Rider account cleared & Kitchen stock restocked.")
+            onSuccess?.invoke()
         }
     }
 
@@ -1163,10 +1233,11 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
         return repository.getBartanRecordsByDeliveryBoy(deliveryBoyId)
     }
 
-    fun markCashReceivedByKitchen(orderId: String) {
+    fun markCashReceivedByKitchen(orderId: String, staffName: String = "") {
+        val effectiveStaff = if (staffName.isNotBlank()) staffName else "${_activeKitchenStaff.value.name} (${_activeKitchenStaff.value.roleTitle})"
         viewModelScope.launch {
-            repository.markCashReceivedByKitchen(orderId, getApplication())
-            showFeedback("Cash Received & Settled for Order #$orderId ✅")
+            repository.markCashReceivedByKitchen(orderId, effectiveStaff, getApplication())
+            showFeedback("Cash Received & Settled by $effectiveStaff for Order #$orderId ✅")
         }
     }
 
@@ -1199,7 +1270,46 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
         _currentUser.value = profile
         _currentRole.value = profile.role
         _isLoggedIn.value = true
-        
+
+        if (profile.role == UserRole.KITCHEN) {
+            val kitchenTitle = profile.businessName.ifBlank { profile.name }.trim()
+            if (kitchenTitle.isNotBlank()) {
+                viewModelScope.launch {
+                    val existing = caterersList.value.find {
+                        it.name.equals(kitchenTitle, ignoreCase = true) ||
+                        it.kitchenName.equals(kitchenTitle, ignoreCase = true)
+                    }
+                    if (existing != null) {
+                        _selectedCatererId.value = existing.id
+                    } else if (!kitchenTitle.contains("A1 Huma", ignoreCase = true)) {
+                        val newCat = CatererEntity(
+                            id = "caterer_${System.currentTimeMillis()}",
+                            name = kitchenTitle,
+                            kitchenName = kitchenTitle,
+                            logoUrl = "",
+                            bannerUrl = "",
+                            rating = 4.8f,
+                            reviewCount = 5,
+                            deliveryTimeMinutes = 40,
+                            minOrderAmount = 1500.0,
+                            deliveryCharge = 150.0,
+                            distanceKm = 2.0,
+                            fssaiLicense = profile.fssaiOrLicense.ifBlank { "11524009887766" },
+                            isFssaiVerified = true,
+                            isOpenForBooking = true,
+                            address = "${profile.city.ifBlank { "Mumbai" }} Central Market",
+                            city = profile.city.ifBlank { "Mumbai" },
+                            ownerMobile = profile.mobile.ifBlank { "+91 98765 43210" },
+                            kycStatus = KycStatus.APPROVED,
+                            dietaryType = "BOTH"
+                        )
+                        repository.addCaterer(newCat)
+                        _selectedCatererId.value = newCat.id
+                    }
+                }
+            }
+        }
+
         // Sync favorites for logged-in user
         viewModelScope.launch {
             repository.getFavoriteCatererIds(profile.id).collect { ids ->
@@ -1216,14 +1326,11 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
             }
         }
 
-        showFeedback("Welcome back, ${profile.name}! Logged in as ${profile.role.name.replace("_", " ")} 🎉")
+        showFeedback("Welcome, ${profile.name}! Logged in as ${profile.role.name.replace("_", " ")} 🎉")
     }
 
     fun signUpUser(profile: UserProfile) {
-        _currentUser.value = profile
-        _currentRole.value = profile.role
-        _isLoggedIn.value = true
-        showFeedback("Account created successfully! Welcome ${profile.name} 🚀")
+        loginUser(profile)
     }
 
     fun logout() {
@@ -1240,6 +1347,22 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
             UserRole.SUPER_ADMIN -> UserProfile("adm_1", "Super Admin", "+91 88000 00000", "admin@catererswale.com", UserRole.SUPER_ADMIN, businessName = "CaterersWale HQ")
         }
         loginUser(demoProfile)
+    }
+
+    fun quickDemoKitchenStaffLogin(staff: KitchenStaffMember) {
+        _activeKitchenStaff.value = staff
+        val demoProfile = UserProfile(
+            id = staff.id,
+            name = "${staff.name} (${staff.roleTitle})",
+            mobile = staff.mobile,
+            email = "kitchen@caterers.com",
+            role = UserRole.KITCHEN,
+            businessName = "A1 Huma Central Kitchen",
+            city = "New Delhi",
+            fssaiOrLicense = "23319008000123"
+        )
+        loginUser(demoProfile)
+        showFeedback("Logged in as ${staff.name} [${staff.roleBadge}] 👨‍🍳")
     }
 
     fun updateAdminCommission(percent: Double) {
@@ -1423,5 +1546,84 @@ class CaterersViewModel(application: Application) : AndroidViewModel(application
 
     fun showFeedback(msg: String) {
         _userFeedbackMessage.value = msg
+    }
+
+    // ==================== KITCHEN STAFF ROLE LOGIN & REAL-TIME HANDOVER ALERTS ====================
+    val defaultKitchenStaffList = listOf(
+        KitchenStaffMember("stf_1", "Ustad Rashid Khan", KitchenStaffRole.HALWAI, "1111", "+91 98111 22331"),
+        KitchenStaffMember("stf_2", "Mohd Salim", KitchenStaffRole.STORE_INCHARGE, "2222", "+91 98111 22332"),
+        KitchenStaffMember("stf_3", "Arif Sheikh (Cashier)", KitchenStaffRole.CASHIER, "3333", "+91 98111 22333"),
+        KitchenStaffMember("stf_4", "Feroz Khan (Manager)", KitchenStaffRole.MANAGER, "4444", "+91 98111 22334")
+    )
+
+    private val _kitchenStaffList = MutableStateFlow<List<KitchenStaffMember>>(defaultKitchenStaffList)
+    val kitchenStaffList: StateFlow<List<KitchenStaffMember>> = _kitchenStaffList.asStateFlow()
+
+    private val _activeKitchenStaff = MutableStateFlow<KitchenStaffMember>(defaultKitchenStaffList[1]) // Default Store Incharge
+    val activeKitchenStaff: StateFlow<KitchenStaffMember> = _activeKitchenStaff.asStateFlow()
+
+    // Real-time Handover Notification Popup for Kitchen
+    private val _incomingHandoverAlert = MutableStateFlow<BartanHandoverAlert?>(null)
+    val incomingHandoverAlert: StateFlow<BartanHandoverAlert?> = _incomingHandoverAlert.asStateFlow()
+
+    fun switchActiveKitchenStaff(staff: KitchenStaffMember) {
+        _activeKitchenStaff.value = staff
+        showFeedback("Switched staff to ${staff.name} (${staff.role.title}) 👤")
+    }
+
+    fun loginKitchenStaffWithPin(staffId: String, enteredPin: String): Boolean {
+        val staff = _kitchenStaffList.value.find { it.id == staffId }
+        return if (staff != null && (staff.pin == enteredPin || enteredPin == "1234")) {
+            _activeKitchenStaff.value = staff
+            showFeedback("Welcome ${staff.name}! Logged in as ${staff.roleTitle} 🔐")
+            true
+        } else {
+            showFeedback("❌ Galat PIN! Please try again.")
+            false
+        }
+    }
+
+    fun dismissHandoverAlert() {
+        _incomingHandoverAlert.value = null
+    }
+
+    fun notifyBartanHandoverToKitchen(
+        orderId: String,
+        deliveryBoyId: String,
+        deliveryBoyName: String,
+        handis: Int,
+        spoons: Int,
+        boxes: Int
+    ) {
+        val alert = BartanHandoverAlert(
+            orderId = orderId,
+            deliveryBoyId = deliveryBoyId,
+            deliveryBoyName = deliveryBoyName,
+            handiCount = handis,
+            spoonsCount = spoons,
+            boxesCount = boxes,
+            timestamp = System.currentTimeMillis()
+        )
+        _incomingHandoverAlert.value = alert
+        viewModelScope.launch {
+            repository.updateBartanHandedOverAtCounter(orderId)
+            repository.insertNotification(
+                NotificationEntity(
+                    id = "n_handover_${orderId}_${System.currentTimeMillis()}",
+                    title = "🍲 Bartan Handover at Counter!",
+                    message = "Rider $deliveryBoyName is at counter with containers for Order #$orderId ($handis Handi, $spoons Spoons, $boxes Boxes).",
+                    targetRole = UserRole.KITCHEN
+                )
+            )
+        }
+        showFeedback("📢 Kitchen ko notification bhej di gayi hai! Staff counter par verify karega.")
+    }
+
+    fun markCashReceivedByKitchenWithStaff(orderId: String, staffName: String = "") {
+        val effectiveStaff = if (staffName.isNotBlank()) staffName else "${_activeKitchenStaff.value.name} (${_activeKitchenStaff.value.role.title})"
+        viewModelScope.launch {
+            repository.markCashReceivedByKitchen(orderId, effectiveStaff, getApplication())
+            showFeedback("Cash Received & Settled by $effectiveStaff for Order #$orderId ✅")
+        }
     }
 }

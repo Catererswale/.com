@@ -45,6 +45,7 @@ import android.widget.Toast
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -180,18 +181,19 @@ fun CustomerProfileScreen(
                                 Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, tint = VegGreen, modifier = Modifier.size(22.dp))
                             }
                             Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("Foodie Wallet & Passbook", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Surface(color = VegGreen.copy(alpha = 0.15f), shape = RoundedCornerShape(4.dp)) {
-                                        Text("₹500.00", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = VegGreen, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-                                    }
-                                }
-                                Text("Earned cashback, referral bonus & instant refunds", fontSize = 11.5.sp, color = Color.Gray)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Foodie Wallet & Passbook", fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("Earned cashback & refunds", fontSize = 11.5.sp, color = Color.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
-                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.Gray)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(color = VegGreen.copy(alpha = 0.15f), shape = RoundedCornerShape(6.dp)) {
+                                Text("₹500.00", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = VegGreen, maxLines = 1, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.Gray)
+                        }
                     }
                 }
 
@@ -222,18 +224,19 @@ fun CustomerProfileScreen(
                                 Icon(Icons.Default.Language, contentDescription = null, tint = SaffronPrimary, modifier = Modifier.size(22.dp))
                             }
                             Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("App Language (भाषा)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Surface(color = AmberSecondary, shape = RoundedCornerShape(4.dp)) {
-                                        Text(currentLanguage.displayName, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.Black, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-                                    }
-                                }
-                                Text("English / हिन्दी / Hinglish", fontSize = 11.5.sp, color = Color.Gray)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("App Language (भाषा)", fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("English / हिन्दी / Hinglish", fontSize = 11.5.sp, color = Color.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
-                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.Gray)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(color = AmberSecondary, shape = RoundedCornerShape(6.dp)) {
+                                Text(currentLanguage.displayName, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Black, maxLines = 1, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.Gray)
+                        }
                     }
                 }
 
@@ -264,18 +267,68 @@ fun CustomerProfileScreen(
                                 Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = SaffronPrimary, modifier = Modifier.size(22.dp))
                             }
                             Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("My Orders & Live Tracking", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Surface(color = AmberSecondary, shape = RoundedCornerShape(4.dp)) {
-                                        Text("${orders.size} Orders", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color.Black, modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp))
-                                    }
-                                }
-                                Text("Track active degh deliveries & rate past feast meals", fontSize = 11.5.sp, color = Color.Gray)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("My Orders & Live Tracking", fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("Track active degh deliveries", fontSize = 11.5.sp, color = Color.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                         }
-                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.Gray)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(color = AmberSecondary, shape = RoundedCornerShape(6.dp)) {
+                                Text("${orders.size} Orders", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Black, maxLines = 1, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.Gray)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Switch App Portal for Testing
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("profile_switch_portal_card"),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBEB)),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                    elevation = CardDefaults.cardElevation(2.dp)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "🔄 Switch App Portal (Testing Mode)",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = Color(0xFF92400E)
+                        )
+                        Text(
+                            text = "Tap to switch directly to Kitchen or Delivery Partner app",
+                            fontSize = 11.sp,
+                            color = Color(0xFFB45309)
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = { viewModel.switchRole(UserRole.KITCHEN) },
+                                modifier = Modifier.weight(1f).height(38.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("👨‍🍳 Kitchen App", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Button(
+                                onClick = { viewModel.switchRole(UserRole.DELIVERY_BOY) },
+                                modifier = Modifier.weight(1f).height(38.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text("🛵 Delivery App", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
 
@@ -656,30 +709,30 @@ fun DeliveryOtpSmallColumn(
     val context = LocalContext.current
 
     Surface(
-        color = if (isDelivered) Color(0xFFF8FAFC) else Color(0xFF141416),
+        color = if (isDelivered) Color(0xFFF1F5F9) else Color(0xFFFFFBEB),
         shape = RoundedCornerShape(8.dp),
         border = BorderStroke(
             1.dp,
-            if (isDelivered) Color(0xFFCBD5E1) else Color(0xFFEA580C).copy(alpha = 0.5f)
+            if (isDelivered) Color(0xFFCBD5E1) else Color(0xFFF59E0B)
         ),
         modifier = modifier
             .fillMaxWidth()
             .clickable {
                 clipboardManager.setText(AnnotatedString(otp))
-                Toast.makeText(context, "Delivery OTP $otp Copied to Clipboard! 📋", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Delivery OTP $otp Copied! 📋", Toast.LENGTH_SHORT).show()
             }
             .testTag("delivery_otp_badge_$otp")
     ) {
         Row(
             modifier = Modifier
-                .padding(horizontal = 10.dp, vertical = 7.dp)
+                .padding(horizontal = 10.dp, vertical = 6.dp)
                 .fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f, fill = false)
             ) {
                 Surface(
                     shape = CircleShape,
@@ -699,36 +752,28 @@ fun DeliveryOtpSmallColumn(
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "Delivery OTP",
+                            text = if (isDelivered) "OTP Verified ✅" else "Delivery OTP (कोड):",
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isDelivered) Color(0xFF334155) else Color.White
+                            color = if (isDelivered) Color(0xFF334155) else Color(0xFF9A3412)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Surface(
-                            color = if (isDelivered) Color(0xFFDCFCE7) else Color(0xFFEA580C).copy(alpha = 0.25f),
-                            shape = RoundedCornerShape(3.dp)
-                        ) {
-                            Text(
-                                text = if (isDelivered) "VERIFIED ✅" else "COMPULSORY",
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = if (isDelivered) Color(0xFF15803D) else Color(0xFFFB923C),
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                            )
-                        }
                     }
-                    Text(
-                        text = if (isDelivered) "Verified with rider upon delivery" else "Share with driver at drop-off • Tap to copy",
-                        fontSize = 9.5.sp,
-                        color = if (isDelivered) Color(0xFF64748B) else Color(0xFFA1A1AA)
-                    )
+                    if (!isDelivered) {
+                        Text(
+                            text = "ड्राइवर को बताएं • Tap to Copy",
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF78350F)
+                        )
+                    }
                 }
             }
 
-            // 4 digit blocks in vibrant orange
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // 4 digit blocks in vibrant orange or slate
             Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 otp.forEach { char ->
@@ -741,17 +786,17 @@ fun DeliveryOtpSmallColumn(
                             Text(
                                 text = char.toString(),
                                 fontSize = 13.sp,
-                                fontWeight = FontWeight.ExtraBold,
+                                fontWeight = FontWeight.Black,
                                 color = if (isDelivered) Color(0xFF1E293B) else Color.White
                             )
                         }
                     }
                 }
-                Spacer(modifier = Modifier.width(3.dp))
+                Spacer(modifier = Modifier.width(4.dp))
                 Icon(
                     Icons.Default.ContentCopy,
                     contentDescription = "Copy OTP",
-                    tint = if (isDelivered) Color(0xFF94A3B8) else Color(0xFFFB923C),
+                    tint = if (isDelivered) Color(0xFF64748B) else Color(0xFFEA580C),
                     modifier = Modifier.size(14.dp)
                 )
             }
@@ -860,11 +905,11 @@ fun CustomerOrdersScreen(
                             .fillMaxWidth()
                             .clickable { onTrackOrder(activeOrder.orderId) }
                             .testTag("orders_active_spotlight_card"),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
                     ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
+                        Column(modifier = Modifier.padding(10.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -873,24 +918,24 @@ fun CustomerOrdersScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Box(
                                         modifier = Modifier
-                                            .size(8.dp)
+                                            .size(7.dp)
                                             .background(Color(0xFF22C55E), CircleShape)
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("ACTIVE ORDER IN TRANSIT", color = Color(0xFF4ADE80), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text("ACTIVE ORDER", color = Color(0xFF4ADE80), fontSize = 9.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
                                 }
                                 Surface(color = AmberSecondary, shape = RoundedCornerShape(4.dp)) {
                                     Text(
                                         text = activeOrder.orderStatus.name,
-                                        fontSize = 9.sp,
+                                        fontSize = 8.5.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = Color.Black,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
                                     )
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
 
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -898,22 +943,21 @@ fun CustomerOrdersScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("Order #${activeOrder.orderId}", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color.White)
-                                    Text("${activeOrder.catererName} • Slot: ${activeOrder.deliveryTimeSlot}", fontSize = 11.5.sp, color = Color(0xFF94A3B8))
-                                    Text("Total: ₹${activeOrder.totalAmount.toInt()} (${activeOrder.itemsSummary})", fontSize = 11.sp, color = Color(0xFFCBD5E1), maxLines = 1)
+                                    Text("Order #${activeOrder.orderId}", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color.White)
+                                    Text("${activeOrder.catererName} • ₹${activeOrder.totalAmount.toInt()}", fontSize = 11.sp, color = Color(0xFFCBD5E1), maxLines = 1)
                                 }
-                                Button(
+                                Surface(
                                     onClick = { onTrackOrder(activeOrder.orderId) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
-                                    shape = RoundedCornerShape(8.dp),
+                                    color = SaffronPrimary,
+                                    shape = RoundedCornerShape(6.dp),
                                     modifier = Modifier.testTag("orders_track_live_order_btn")
                                 ) {
-                                    Text("🔴 Track Live", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                                    Text("🔴 Track Live", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                                 }
                             }
 
                             if (activeOrder.deliveryOtp.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(6.dp))
                                 DeliveryOtpSmallColumn(
                                     otp = activeOrder.deliveryOtp,
                                     isDelivered = false
@@ -924,7 +968,7 @@ fun CustomerOrdersScreen(
                 }
             }
 
-            // Spotlight 2: Delivered Order Feedback & Rating Spotlight (Moved from Home Page)
+            // Spotlight 2: Delivered Order Feedback & Rating Spotlight
             if (latestDeliveredOrder != null && (selectedTab == 0 || selectedTab == 2)) {
                 item {
                     Card(
@@ -932,41 +976,36 @@ fun CustomerOrdersScreen(
                             .fillMaxWidth()
                             .clickable { onRateKitchen(latestDeliveredOrder.orderId) }
                             .testTag("orders_rate_spotlight_card"),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(10.dp),
                         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBEB)),
                         border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFDE68A)),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(12.dp),
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .background(Color(0xFFFEF3C7), CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Default.Star, contentDescription = null, tint = AmberSecondary, modifier = Modifier.size(20.dp))
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column {
-                                    Text("How was the feast from ${latestDeliveredOrder.catererName}?", fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = Color(0xFF92400E))
-                                    Text("Rate your experience & earn +50 Foodie Coins ⭐", fontSize = 11.sp, color = Color(0xFFB45309))
-                                }
+                                Icon(Icons.Default.Star, contentDescription = null, tint = AmberSecondary, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    "Rate feast from ${latestDeliveredOrder.catererName} (+50 Coins)",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.5.sp,
+                                    color = Color(0xFF92400E),
+                                    maxLines = 1
+                                )
                             }
-
-                            Button(
+                            Surface(
                                 onClick = { onRateKitchen(latestDeliveredOrder.orderId) },
-                                colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
-                                shape = RoundedCornerShape(8.dp),
+                                color = SaffronPrimary,
+                                shape = RoundedCornerShape(6.dp),
                                 modifier = Modifier.testTag("orders_rate_feast_btn")
                             ) {
-                                Text("⭐ Rate Now", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                Text("⭐ Rate", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp))
                             }
                         }
                     }
@@ -1024,25 +1063,37 @@ fun CustomerOrdersScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("#${order.orderId}", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = SaffronPrimary)
+                                Text("#${order.orderId}", fontWeight = FontWeight.ExtraBold, fontSize = 15.sp, color = SaffronPrimary)
                                 Spacer(modifier = Modifier.width(6.dp))
                                 if (order.orderStatus.name != "DELIVERED" && order.orderStatus.name != "CANCELLED") {
-                                    Surface(color = Color(0xFFDCFCE7), shape = RoundedCornerShape(4.dp)) {
-                                        Text("LIVE TRACKABLE", fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF15803D), modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                                    Surface(
+                                        color = Color(0xFFDCFCE7),
+                                        shape = RoundedCornerShape(4.dp),
+                                        border = BorderStroke(0.5.dp, Color(0xFF86EFAC))
+                                    ) {
+                                        Text("LIVE TRACKABLE", fontSize = 8.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF15803D), modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
                                     }
                                 }
                             }
                             Surface(
-                                color = if (order.orderStatus.name == "DELIVERED") Color(0xFFE8F5E9) else Color(0xFFFFF3E0),
-                                shape = RoundedCornerShape(4.dp)
+                                color = if (order.orderStatus.name == "DELIVERED") Color(0xFFDCFCE7) else if (order.orderStatus.name == "ON_HOLD") Color(0xFFFEF3C7) else Color(0xFFFFF3E0),
+                                shape = RoundedCornerShape(4.dp),
+                                border = BorderStroke(0.5.dp, if (order.orderStatus.name == "DELIVERED") Color(0xFF86EFAC) else if (order.orderStatus.name == "ON_HOLD") Color(0xFFFDE68A) else Color(0xFFFFCC80))
                             ) {
-                                Text(order.orderStatus.name, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                Text(
+                                    text = if (order.orderStatus.name == "ON_HOLD") "ON HOLD ⏸️" else order.orderStatus.name,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (order.orderStatus.name == "DELIVERED") Color(0xFF15803D) else if (order.orderStatus.name == "ON_HOLD") Color(0xFF92400E) else Color(0xFFC2410C),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
                             }
                         }
 
                         Spacer(modifier = Modifier.height(6.dp))
-                        Text(order.catererName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        Text(order.itemsSummary, fontSize = 11.5.sp, color = Color(0xFF475569))
+                        Text(order.catererName, fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF0F172A))
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(order.itemsSummary, fontSize = 12.5.sp, color = Color(0xFF334155), fontWeight = FontWeight.Medium)
 
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(
@@ -1050,8 +1101,20 @@ fun CustomerOrdersScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("📅 ${order.deliveryDate} (${order.deliveryTimeSlot})", fontSize = 11.sp, color = Color.Gray)
-                            Text("₹${order.totalAmount.toInt()}", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF1E293B))
+                            Surface(
+                                color = Color(0xFFF8FAFC),
+                                shape = RoundedCornerShape(6.dp),
+                                border = BorderStroke(0.5.dp, Color(0xFFE2E8F0))
+                            ) {
+                                Text(
+                                    "📅 ${order.deliveryDate} • ⏰ ${order.deliveryTimeSlot}",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color(0xFF475569),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                )
+                            }
+                            Text("₹${order.totalAmount.toInt()}", fontWeight = FontWeight.ExtraBold, fontSize = 15.5.sp, color = Color(0xFF0F172A))
                         }
 
                         // Delivery Verification OTP Small Column (Customer ko OTP dikhane ke liye)

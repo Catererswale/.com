@@ -57,6 +57,9 @@ interface CaterersDao {
     @Query("DELETE FROM menu_items WHERE id = :id")
     suspend fun deleteMenuItem(id: String)
 
+    @Query("DELETE FROM menu_items WHERE catererId = :catererId")
+    suspend fun deleteMenuItemsByCaterer(catererId: String)
+
     // Cart Items
     @Query("SELECT * FROM cart_items")
     fun getCartItems(): Flow<List<CartItemEntity>>
@@ -104,8 +107,31 @@ interface CaterersDao {
     @Query("UPDATE delivery_boys SET pendingBartanCount = pendingBartanCount + :bartanCount, isBusy = 1 WHERE id = :boyId")
     suspend fun incrementDeliveryBoyBartanCount(boyId: String, bartanCount: Int)
 
+    @Query("UPDATE delivery_boys SET pendingBartanCount = CASE WHEN pendingBartanCount >= :count THEN pendingBartanCount - :count ELSE 0 END WHERE id = :boyId")
+    suspend fun decrementDeliveryBoyBartanCount(boyId: String, count: Int)
+
+    @Query("UPDATE kitchen_utensils_master SET totalStock = totalStock + :qty WHERE kitchenId = :kitchenId AND (name LIKE '%' || :keyword || '%' OR icon = :icon)")
+    suspend fun incrementUtensilStock(kitchenId: String, keyword: String, icon: String, qty: Int)
+
+    @Query("UPDATE bartan_records SET isCollected = :isCollected, collectedDate = :date, returnStatus = :returnStatus, returnedHandiCount = :retHandis, returnedSpoonsCount = :retSpoons, returnedBoxesCount = :retBoxes, missingRemarks = :remarks, verifiedByStaffName = :staffName, verifiedAtTime = :time WHERE id = :id")
+    suspend fun updateBartanVerification(
+        id: String,
+        isCollected: Boolean,
+        date: String,
+        returnStatus: String,
+        retHandis: Int,
+        retSpoons: Int,
+        retBoxes: Int,
+        remarks: String,
+        staffName: String,
+        time: String
+    )
+
     @Query("SELECT * FROM bartan_records WHERE orderId = :orderId LIMIT 1")
     suspend fun getBartanRecordByOrderId(orderId: String): BartanRecordEntity?
+
+    @Query("SELECT * FROM bartan_records WHERE id = :id LIMIT 1")
+    suspend fun getBartanRecordById(id: String): BartanRecordEntity?
 
     @Query("UPDATE orders SET userRating = :rating, userReview = :review WHERE orderId = :orderId")
     suspend fun updateOrderReview(orderId: String, rating: Float, review: String)
@@ -113,8 +139,20 @@ interface CaterersDao {
     @Query("UPDATE orders SET isBartanReturned = :isReturned WHERE orderId = :orderId")
     suspend fun updateBartanStatus(orderId: String, isReturned: Boolean)
 
+    @Query("UPDATE orders SET isCashSubmittedToKitchen = :submitted, paymentStatus = :paymentStatus, cashReceivedByStaffName = :staffName, cashReceivedAtTime = :time WHERE orderId = :orderId")
+    suspend fun updateOrderCashSubmittedWithStaff(
+        orderId: String,
+        submitted: Boolean,
+        paymentStatus: PaymentStatus = PaymentStatus.FULLY_SETTLED,
+        staffName: String = "",
+        time: String = ""
+    )
+
     @Query("UPDATE orders SET isCashSubmittedToKitchen = :submitted, paymentStatus = :paymentStatus WHERE orderId = :orderId")
     suspend fun updateOrderCashSubmitted(orderId: String, submitted: Boolean, paymentStatus: PaymentStatus = PaymentStatus.FULLY_SETTLED)
+
+    @Query("UPDATE bartan_records SET returnStatus = 'HANDED_OVER_AT_COUNTER' WHERE orderId = :orderId")
+    suspend fun updateBartanHandedOverAtCounter(orderId: String)
 
     @Query("UPDATE orders SET cashCollectedByDeliveryBoy = :cashAmount, isCashSubmittedToKitchen = :submitted WHERE orderId = :orderId")
     suspend fun updateOrderCashCollected(orderId: String, cashAmount: Double, submitted: Boolean)

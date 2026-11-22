@@ -1,3 +1,7 @@
 <resources>
     <string name="app_name">Caterers Wale</string>
+    <string name="app_name_customer">CaterersWale Customer</string>
+    <string name="app_name_kitchen">CW Kitchen Partner</string>
+    <string name="app_name_delivery">CW Delivery Partner</string>
+    <string name="app_name_admin">CW Super Admin</string>
 </resources>

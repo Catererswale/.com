@@ -42,6 +42,11 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material.icons.filled.LocalOffer
+import com.example.data.models.KitchenSettingsConfig
+import com.example.data.models.DiscountType
 import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.delay
@@ -99,6 +104,12 @@ import com.example.data.models.OrderEntity
 import com.example.data.models.PaymentStatus
 import androidx.compose.runtime.collectAsState
 import com.example.util.NotificationHelper
+import com.example.util.LocationHelper
+import android.Manifest
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.MyLocation
 
 @Composable
 fun AddressScreen(
@@ -110,6 +121,8 @@ fun AddressScreen(
     is30PercentAdvance: Boolean = true,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    var isFetchingAddressGps by remember { mutableStateOf(false) }
     var savedAddresses by remember(defaultAddress) {
         mutableStateOf(
             listOf(
@@ -123,6 +136,34 @@ fun AddressScreen(
     var primaryPhone by remember { mutableStateOf(initialPhone) }
     var alternatePhone by remember { mutableStateOf(initialAltPhone) }
     var showAddDialog by remember { mutableStateOf(false) }
+
+    val addressPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+            permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (granted) {
+            isFetchingAddressGps = true
+            LocationHelper.fetchCurrentLocation(
+                context = context,
+                onSuccess = { res ->
+                    isFetchingAddressGps = false
+                    val newGpsAddr = "📍 GPS Current Location: ${res.addressLine}"
+                    if (!savedAddresses.contains(newGpsAddr)) {
+                        savedAddresses = listOf(newGpsAddr) + savedAddresses
+                    }
+                    selectedAddress = newGpsAddr
+                    Toast.makeText(context, "✅ Current Location detected!", Toast.LENGTH_SHORT).show()
+                },
+                onError = { err ->
+                    isFetchingAddressGps = false
+                    Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
+                }
+            )
+        } else {
+            Toast.makeText(context, "Please allow Location permission to detect GPS address", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     Column(
         modifier = modifier
@@ -150,6 +191,55 @@ fun AddressScreen(
                 .padding(16.dp)
         ) {
             item {
+                // Prominent Use Current Location (GPS) Card
+                Button(
+                    onClick = {
+                        if (LocationHelper.hasLocationPermission(context)) {
+                            isFetchingAddressGps = true
+                            LocationHelper.fetchCurrentLocation(
+                                context = context,
+                                onSuccess = { res ->
+                                    isFetchingAddressGps = false
+                                    val newGpsAddr = "📍 GPS Current Location: ${res.addressLine}"
+                                    if (!savedAddresses.contains(newGpsAddr)) {
+                                        savedAddresses = listOf(newGpsAddr) + savedAddresses
+                                    }
+                                    selectedAddress = newGpsAddr
+                                    Toast.makeText(context, "✅ Current Location detected!", Toast.LENGTH_SHORT).show()
+                                },
+                                onError = { err ->
+                                    isFetchingAddressGps = false
+                                    Toast.makeText(context, err, Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        } else {
+                            addressPermissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
+                            )
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = VegGreen),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("checkout_use_current_gps_btn")
+                ) {
+                    Icon(Icons.Default.MyLocation, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (isFetchingAddressGps) "Detecting Current GPS Location..." else "📍 Use My Current Location (GPS) / करंट लोकेशन लें",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -258,27 +348,7 @@ fun AddressScreen(
                 }
             }
 
-            // Google Map Pin Simulation Box
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFE0F2F1))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.PinDrop, contentDescription = null, tint = Color(0xFF00695C), modifier = Modifier.size(28.dp))
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text("Google Maps Location Pin", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF004D40))
-                            Text("Point precisely mapped for catering delivery van entrance", fontSize = 11.sp, color = Color(0xFF00695C))
-                        }
-                    }
-                }
-            }
+
         }
 
         Surface(color = Color.White, shadowElevation = 8.dp, modifier = Modifier.fillMaxWidth()) {
@@ -553,15 +623,18 @@ fun AddressScreen(
 @Composable
 fun PaymentScreen(
     totalAmount: Double,
-    is30PercentAdvance: Boolean,
+    is30PercentAdvance: Boolean = true,
     deliveryAddress: String = "",
     customerPhone: String = "",
     deliveryDate: String = "",
     deliveryTimeSlot: String = "",
+    viewModel: CaterersViewModel? = null,
     onBack: () -> Unit,
     onConfirmPayment: (PaymentMethod) -> Unit,
+    onConfirmPaymentWithAdvance: ((PaymentMethod, Boolean, Double) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    var isAdvanceOption by remember { mutableStateOf(is30PercentAdvance) }
     var selectedMethod by remember { mutableStateOf(PaymentMethod.DYNAMIC_QR) }
     var isProcessingPayment by remember { mutableStateOf(false) }
     var upiIdInput by remember { mutableStateOf("") }
@@ -571,9 +644,49 @@ fun PaymentScreen(
     var selectedBank by remember { mutableStateOf("State Bank of India") }
     var copiedUpiId by remember { mutableStateOf(false) }
 
-    // User requested 50% Advance Payment
-    val payableNow = if (is30PercentAdvance) totalAmount * 0.50 else totalAmount
-    val balancePay = totalAmount - payableNow
+    // Admin Promo Code & Loyalty Points States (Moved to Payment screen)
+    val settings = viewModel?.kitchenSettings?.collectAsState()?.value ?: KitchenSettingsConfig()
+    val appliedPromo = viewModel?.appliedAdminPromoCode?.collectAsState()?.value ?: ""
+    val userPoints = viewModel?.userLoyaltyPoints?.collectAsState()?.value ?: 250
+
+    var promoInput by remember { mutableStateOf("") }
+    var isRedeemingLoyalty by remember { mutableStateOf(false) }
+
+    // Super Admin Promo Code Discount Calculation
+    val adminDiscountAmount = remember(totalAmount, settings, appliedPromo) {
+        val isEligible = totalAmount >= settings.adminMinOrderForDiscount
+        val isPromoApplied = appliedPromo.isNotBlank() || settings.adminOrderDiscountType != DiscountType.NONE
+        if (isEligible && isPromoApplied) {
+            when (settings.adminOrderDiscountType) {
+                DiscountType.PERCENTAGE -> {
+                    totalAmount * (settings.adminOrderDiscountValue / 100.0)
+                }
+                DiscountType.FLAT -> {
+                    minOf(totalAmount, settings.adminOrderDiscountValue)
+                }
+                else -> 0.0
+            }
+        } else 0.0
+    }
+
+    val subtotalAfterPromo = maxOf(0.0, totalAmount - adminDiscountAmount)
+
+    // Loyalty Points Discount Calculation
+    val maxRedeemableRupees = subtotalAfterPromo * (settings.maxLoyaltyRedeemPercent / 100.0)
+    val availablePointsRupees = userPoints * settings.loyaltyPointRupeeValue
+    val loyaltyDiscountAmount = if (isRedeemingLoyalty && settings.isLoyaltyEnabled) {
+        minOf(availablePointsRupees, maxRedeemableRupees)
+    } else 0.0
+
+    val redeemedPointsCount = if (loyaltyDiscountAmount > 0 && settings.loyaltyPointRupeeValue > 0) {
+        (loyaltyDiscountAmount / settings.loyaltyPointRupeeValue).toInt()
+    } else 0
+
+    val effectiveTotal = maxOf(0.0, subtotalAfterPromo - loyaltyDiscountAmount)
+
+    // User requested 50% Advance Token or 100% Full Payment
+    val payableNow = if (isAdvanceOption) effectiveTotal * 0.50 else effectiveTotal
+    val balancePay = effectiveTotal - payableNow
 
     if (isProcessingPayment) {
         Dialog(onDismissRequest = { /* Protected during banking gateway verification */ }) {
@@ -620,7 +733,14 @@ fun PaymentScreen(
         LaunchedEffect(Unit) {
             delay(1300L)
             isProcessingPayment = false
-            onConfirmPayment(selectedMethod)
+            if (redeemedPointsCount > 0) {
+                viewModel?.deductLoyaltyPoints(redeemedPointsCount)
+            }
+            if (onConfirmPaymentWithAdvance != null) {
+                onConfirmPaymentWithAdvance(selectedMethod, isAdvanceOption, effectiveTotal)
+            } else {
+                onConfirmPayment(selectedMethod)
+            }
         }
     }
 
@@ -650,6 +770,203 @@ fun PaymentScreen(
                 .padding(16.dp)
         ) {
             item {
+                // 1. Catering Booking Payment Terms Card (Moved from CartScreen)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.2.dp, if (isAdvanceOption) SaffronPrimary else Color(0xFFE2E8F0))
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "Catering Booking Payment Terms / भुगतान नियम",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1E293B)
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Option 1: 50% Advance Token
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { isAdvanceOption = true }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = isAdvanceOption,
+                                onClick = { isAdvanceOption = true },
+                                colors = RadioButtonDefaults.colors(selectedColor = SaffronPrimary)
+                            )
+                            Column(modifier = Modifier.padding(start = 8.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Pay 50% Advance Token Now", fontWeight = FontWeight.Bold, fontSize = 14.5.sp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(color = Color(0xFFDCFCE7), shape = RoundedCornerShape(4.dp)) {
+                                        Text(
+                                            "Recommended",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF166534),
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                                        )
+                                    }
+                                }
+                                Text(
+                                    "Pay ₹${(totalAmount * 0.50).toInt()} today to lock kitchen date & raw material preparation. Remaining balance ₹${(totalAmount - (totalAmount * 0.50)).toInt()} payable on delivery.",
+                                    fontSize = 12.sp,
+                                    color = VegGreen,
+                                    lineHeight = 16.sp
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+                        HorizontalDivider(color = Color(0xFFF1F5F9))
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Option 2: 100% Full Payment
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { isAdvanceOption = false }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = !isAdvanceOption,
+                                onClick = { isAdvanceOption = false },
+                                colors = RadioButtonDefaults.colors(selectedColor = SaffronPrimary)
+                            )
+                            Column(modifier = Modifier.padding(start = 8.dp)) {
+                                Text("Pay 100% Full Amount Now", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text(
+                                    "Pay total ₹${totalAmount.toInt()} online now without any remaining balance.",
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // --- SUPER ADMIN PROMO CODE SECTION (Moved from Cart) ---
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.LocalOffer, contentDescription = null, tint = SaffronPrimary, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Super Admin Promo Code", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        if (appliedPromo.isNotBlank()) {
+                            Surface(
+                                color = Color(0xFFE8F5E9),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text("Code '$appliedPromo' Applied! 🎉", fontWeight = FontWeight.Bold, color = VegGreen, fontSize = 13.sp)
+                                        Text("Saved ₹${adminDiscountAmount.toInt()} on this order", fontSize = 11.sp, color = VegGreen)
+                                    }
+                                    TextButton(onClick = { viewModel?.removeAdminPromoCode() }) {
+                                        Text("Remove", color = Color.Red, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = promoInput,
+                                    onValueChange = { promoInput = it },
+                                    placeholder = { Text("Enter Promo Code (e.g. ${settings.adminPromoCode})", fontSize = 12.sp) },
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                                Button(
+                                    onClick = {
+                                        if (promoInput.isNotBlank()) {
+                                            viewModel?.applyAdminPromoCode(promoInput)
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Text("Apply", fontSize = 12.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // --- ADMIN LOYALTY POINTS SECTION (Moved from Cart per screenshot) ---
+                if (settings.isLoyaltyEnabled) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8E1)),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, AmberSecondary)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("🎁", fontSize = 20.sp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text("Admin Loyalty Points", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF5D4037))
+                                        Text("Balance: $userPoints Points (₹${(userPoints * settings.loyaltyPointRupeeValue).toInt()} Value)", fontSize = 11.sp, color = Color(0xFF8D6E63))
+                                    }
+                                }
+                                Switch(
+                                    checked = isRedeemingLoyalty,
+                                    onCheckedChange = { isRedeemingLoyalty = it },
+                                    colors = SwitchDefaults.colors(checkedThumbColor = AmberSecondary, checkedTrackColor = Color(0xFFFFECB3)),
+                                    enabled = userPoints > 0
+                                )
+                            }
+
+                            if (isRedeemingLoyalty) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                HorizontalDivider(color = Color(0xFFFFE082))
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    "Redeeming $redeemedPointsCount Points for ₹${loyaltyDiscountAmount.toInt()} Instant Discount! (Max ${settings.maxLoyaltyRedeemPercent}% of order value)",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = VegGreen
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
+                // 2. Total Catering Order Summary Card
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B)),
@@ -665,19 +982,55 @@ fun PaymentScreen(
                             Text("₹${totalAmount.toInt()}", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
 
+                        if (adminDiscountAmount > 0) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Super Admin Promo Discount", color = VegGreen, fontSize = 12.sp)
+                                Text("-₹${adminDiscountAmount.toInt()}", color = VegGreen, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        if (loyaltyDiscountAmount > 0) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Admin Loyalty Points Discount ($redeemedPointsCount Pts)", color = Color(0xFFFFCC80), fontSize = 12.sp)
+                                Text("-₹${loyaltyDiscountAmount.toInt()}", color = Color(0xFFFFCC80), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        if (adminDiscountAmount > 0 || loyaltyDiscountAmount > 0) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Net Booking Amount", color = Color(0xFFE2E8F0), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Text("₹${effectiveTotal.toInt()}", color = Color(0xFFE2E8F0), fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(6.dp))
                         HorizontalDivider(color = Color(0xFF334155))
                         Spacer(modifier = Modifier.height(6.dp))
 
                         Text(
-                            if (is30PercentAdvance) "50% Advance Token Payable Today" else "Full Payment Payable Today",
+                            if (isAdvanceOption) "50% Advance Token Payable Today" else "Full Payment Payable Today",
                             color = AmberSecondary,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                         Text("₹${payableNow.toInt()}", color = AmberSecondary, fontSize = 28.sp, fontWeight = FontWeight.Bold)
 
-                        if (is30PercentAdvance) {
+                        if (isAdvanceOption) {
                             Spacer(modifier = Modifier.height(4.dp))
                             Surface(
                                 color = Color(0xFF0F172A),
@@ -745,13 +1098,13 @@ fun PaymentScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    if (is30PercentAdvance) "Select 50% Advance Online Payment Mode" else "Select 100% Full Online Payment Mode",
+                    if (isAdvanceOption) "Select 50% Advance Online Payment Mode" else "Select 100% Full Online Payment Mode",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF1E293B)
                 )
                 Text(
-                    if (is30PercentAdvance) "Catering date lock aur rashan booking ke liye 50% advance anivarya hai." else "Pura payment online ho raha hai. Delivery par ₹0 balance rahega.",
+                    if (isAdvanceOption) "Catering date lock aur rashan booking ke liye 50% advance anivarya hai." else "Pura payment online ho raha hai. Delivery par ₹0 balance rahega.",
                     fontSize = 11.5.sp,
                     color = Color.Gray
                 )
@@ -810,7 +1163,7 @@ fun PaymentScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                if (is30PercentAdvance && balancePay > 0) {
+                if (isAdvanceOption && balancePay > 0) {
                     // Remaining 50% Balance on Delivery Information Card (Only for 50% Advance)
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -937,7 +1290,7 @@ fun PaymentScreen(
                     .testTag("pay_and_confirm_button")
             ) {
                 Text(
-                    if (is30PercentAdvance) "Pay 50% Advance (₹${payableNow.toInt()}) & Lock Booking" else "Pay Full ₹${payableNow.toInt()} & Confirm Booking",
+                    if (isAdvanceOption) "Pay 50% Advance (₹${payableNow.toInt()}) & Lock Booking" else "Pay Full ₹${payableNow.toInt()} & Confirm Booking",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -1049,70 +1402,10 @@ private fun PaymentMethodDetailsCard(
                             modifier = Modifier.size(200.dp)
                         ) {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Canvas(modifier = Modifier.size(160.dp)) {
-                                    val moduleSize = size.width / 25f
-                                    val darkColor = androidx.compose.ui.graphics.Color(0xFF0F172A)
-                                    val saffronColor = androidx.compose.ui.graphics.Color(0xFFE65100)
-
-                                    fun drawFinder(startX: Float, startY: Float) {
-                                        drawRect(
-                                            color = darkColor,
-                                            topLeft = Offset(startX, startY),
-                                            size = Size(moduleSize * 7, moduleSize * 7)
-                                        )
-                                        drawRect(
-                                            color = androidx.compose.ui.graphics.Color.White,
-                                            topLeft = Offset(startX + moduleSize, startY + moduleSize),
-                                            size = Size(moduleSize * 5, moduleSize * 5)
-                                        )
-                                        drawRect(
-                                            color = darkColor,
-                                            topLeft = Offset(startX + moduleSize * 2, startY + moduleSize * 2),
-                                            size = Size(moduleSize * 3, moduleSize * 3)
-                                        )
-                                    }
-
-                                    drawFinder(0f, 0f)
-                                    drawFinder(moduleSize * 18, 0f)
-                                    drawFinder(0f, moduleSize * 18)
-
-                                    for (r in 0 until 25) {
-                                        for (c in 0 until 25) {
-                                            val inTopLeft = r < 8 && c < 8
-                                            val inTopRight = r < 8 && c >= 17
-                                            val inBottomLeft = r >= 17 && c < 8
-                                            val inCenterBadge = r in 9..15 && c in 9..15
-
-                                            if (!inTopLeft && !inTopRight && !inBottomLeft && !inCenterBadge) {
-                                                val hash = (r * 31 + c * 17 + payableNow.toInt()) % 11
-                                                if (hash in listOf(0, 2, 3, 5, 7, 8)) {
-                                                    drawRect(
-                                                        color = if ((r + c) % 5 == 0) saffronColor else darkColor,
-                                                        topLeft = Offset(c * moduleSize, r * moduleSize),
-                                                        size = Size(moduleSize * 0.92f, moduleSize * 0.92f)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Surface(
-                                    color = Color(0xFFFFF7ED),
-                                    shape = RoundedCornerShape(8.dp),
-                                    border = BorderStroke(1.5.dp, SaffronPrimary),
-                                    shadowElevation = 2.dp,
-                                    modifier = Modifier.padding(6.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(Icons.Default.Verified, contentDescription = null, tint = SaffronPrimary, modifier = Modifier.size(13.dp))
-                                        Spacer(modifier = Modifier.width(3.dp))
-                                        Text("₹${payableNow.toInt()}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = SaffronPrimary)
-                                    }
-                                }
+                                com.example.ui.kitchen.DigitalQrCodeCanvas(
+                                    kitchenCode = "upi://pay?pa=catererswale@upi&pn=CaterersWale&am=${payableNow.toInt()}&cu=INR",
+                                    modifier = Modifier.size(176.dp)
+                                )
                             }
                         }
                     }

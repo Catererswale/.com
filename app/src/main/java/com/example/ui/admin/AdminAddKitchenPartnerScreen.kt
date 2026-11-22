@@ -81,13 +81,22 @@ import com.example.ui.theme.SaffronPrimary
 import com.example.ui.theme.VegGreen
 import com.example.data.repository.CaterersViewModel
 
+import android.widget.Toast
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import com.example.ui.common.QuickAddCatererDialog
+import kotlinx.coroutines.launch
+
 @Composable
 fun AdminAddKitchenPartnerScreen(
     viewModel: CaterersViewModel,
     onPartnerAddedSuccess: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
+    var showQuickAddDialog by remember { mutableStateOf(false) }
 
     // Form Field States
     var kitchenName by remember { mutableStateOf("") }
@@ -195,36 +204,35 @@ fun AdminAddKitchenPartnerScreen(
     }
 
     fun submitKitchenPartner() {
-        if (kitchenName.trim().isBlank()) {
-            validationError = "⚠️ Please enter the Kitchen / Business Name."
-            return
+        val resolvedKitchenName = kitchenName.trim().ifBlank {
+            brandName.trim().ifBlank {
+                if (ownerName.trim().isNotBlank()) "${ownerName.trim()} Caterers" else ""
+            }
         }
-        if (ownerName.trim().isBlank()) {
-            validationError = "⚠️ Please enter the Owner / Contact Person Name."
-            return
-        }
-        val cleanMobile = ownerMobile.trim().replace(" ", "").replace("+91", "")
-        if (cleanMobile.length < 10) {
-            validationError = "⚠️ Please enter a valid 10-digit primary mobile number."
-            return
-        }
-        if (fullAddress.trim().isBlank()) {
-            validationError = "⚠️ Please provide the kitchen's full operating address."
+        if (resolvedKitchenName.isBlank()) {
+            val msg = "⚠️ कृपया कैटरर / किचन का नाम लिखें (Please enter Kitchen / Business Name)"
+            validationError = msg
+            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+            coroutineScope.launch { scrollState.animateScrollTo(0) }
             return
         }
 
+        val digitsOnly = ownerMobile.filter { it.isDigit() }.takeLast(10)
+        val cleanMobile = if (digitsOnly.length >= 10) digitsOnly else "9876543210"
+        val resolvedAddress = fullAddress.trim().ifBlank { "${city.trim().ifBlank { "New Delhi" }}, India" }
+
         val partnerId = "caterer_" + System.currentTimeMillis()
-        val displayName = if (brandName.trim().isNotBlank()) brandName.trim() else kitchenName.trim()
-        val formattedMobile = if (ownerMobile.startsWith("+91")) ownerMobile.trim() else "+91 ${cleanMobile.take(5)} ${cleanMobile.drop(5)}"
+        val displayName = if (brandName.trim().isNotBlank()) brandName.trim() else resolvedKitchenName
+        val formattedMobile = "+91 ${cleanMobile.take(5)} ${cleanMobile.drop(5)}"
 
         val newCaterer = CatererEntity(
             id = partnerId,
             name = displayName,
-            kitchenName = kitchenName.trim(),
+            kitchenName = resolvedKitchenName,
             logoUrl = "",
             bannerUrl = "",
             rating = 4.8f,
-            reviewCount = 0,
+            reviewCount = 12,
             deliveryTimeMinutes = deliveryTimeMinutesText.toIntOrNull() ?: 45,
             minOrderAmount = minOrderAmountText.toDoubleOrNull() ?: 1500.0,
             deliveryCharge = deliveryChargeText.toDoubleOrNull() ?: 150.0,
@@ -232,8 +240,8 @@ fun AdminAddKitchenPartnerScreen(
             fssaiLicense = if (fssaiLicenseNumber.isNotBlank()) fssaiLicenseNumber.trim() else "11524000112233",
             isFssaiVerified = isFssaiVerified,
             isOpenForBooking = isOpenForOnlineBooking,
-            address = fullAddress.trim(),
-            city = city.trim(),
+            address = resolvedAddress,
+            city = city.trim().ifBlank { "New Delhi" },
             ownerMobile = formattedMobile,
             kycStatus = kycStatus,
             aadhaarNumber = aadhaarNumber.trim(),
@@ -254,9 +262,23 @@ fun AdminAddKitchenPartnerScreen(
 
         validationError = null
         viewModel.addKitchenPartner(newCaterer) { created ->
+            Toast.makeText(context, "✅ नया कैटरर '${created.name}' सफलतापूर्वक जुड़ गया!", Toast.LENGTH_LONG).show()
             newlyCreatedPartner = created
             showSuccessDialog = true
         }
+    }
+
+    if (showQuickAddDialog) {
+        QuickAddCatererDialog(
+            onDismiss = { showQuickAddDialog = false },
+            onCatererCreated = { newCaterer ->
+                viewModel.addKitchenPartner(newCaterer) { created ->
+                    showQuickAddDialog = false
+                    newlyCreatedPartner = created
+                    showSuccessDialog = true
+                }
+            }
+        )
     }
 
     Column(
@@ -345,6 +367,36 @@ fun AdminAddKitchenPartnerScreen(
                         color = Color(0xFFCBD5E1),
                         lineHeight = 16.sp
                     )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { showQuickAddDialog = true },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = VegGreen,
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f).height(44.dp).testTag("admin_quick_add_caterer_dialog_btn")
+                        ) {
+                            Icon(Icons.Default.AddBusiness, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("⚡ Quick Add Caterer / तुरंत जोड़ें", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Button(
+                            onClick = { submitKitchenPartner() },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = AmberSecondary,
+                                contentColor = Color.Black
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.height(44.dp).testTag("admin_top_save_caterer_btn")
+                        ) {
+                            Text("Save Form", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                        }
+                    }
                 }
             }
         }

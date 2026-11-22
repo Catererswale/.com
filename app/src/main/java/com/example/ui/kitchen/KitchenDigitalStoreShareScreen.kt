@@ -81,6 +81,13 @@ import com.example.ui.theme.AmberSecondary
 import com.example.ui.theme.SaffronPrimary
 import com.example.ui.theme.VegGreen
 import com.example.data.repository.CaterersViewModel
+import androidx.core.content.FileProvider
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.EncodeHintType
+import com.google.zxing.qrcode.QRCodeWriter
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
+import java.io.File
+import java.io.FileOutputStream
 
 @Composable
 fun KitchenDigitalStoreShareScreen(
@@ -90,12 +97,14 @@ fun KitchenDigitalStoreShareScreen(
 ) {
     val context = LocalContext.current
     val caterers by viewModel.caterersList.collectAsState()
-    val kitchen = caterers.find { it.id == "caterer_1" } ?: caterers.firstOrNull()
+    val selectedCatererId by viewModel.selectedCatererId.collectAsState()
+    val activeKitchenId = selectedCatererId ?: "caterer_1"
+    val kitchen = caterers.find { it.id == activeKitchenId } ?: caterers.firstOrNull()
     val menuItems by viewModel.menuItemsList.collectAsState()
-    val kitchenMenu = menuItems.filter { it.catererId == (kitchen?.id ?: "caterer_1") }
+    val kitchenMenu = menuItems.filter { it.catererId == (kitchen?.id ?: activeKitchenId) }
 
-    val storeUrl = "https://catererswale.app/store/${kitchen?.id ?: "caterer_1"}"
-    val storeCode = kitchen?.id ?: "caterer_1"
+    val storeUrl = "https://catererswale.com/store/${kitchen?.id ?: activeKitchenId}"
+    val storeCode = kitchen?.id ?: activeKitchenId
 
     var selectedTemplateIndex by remember { mutableStateOf(0) }
     var showQrStandeeDialog by remember { mutableStateOf(false) }
@@ -479,12 +488,14 @@ fun KitchenDigitalStoreShareScreen(
 
                         OutlinedButton(
                             onClick = {
-                                val sendIntent = Intent().apply {
-                                    action = Intent.ACTION_SEND
-                                    putExtra(Intent.EXTRA_TEXT, "Scan QR or visit our digital store: $storeUrl\nKitchen: ${kitchen?.name}")
-                                    type = "text/plain"
-                                }
-                                context.startActivity(Intent.createChooser(sendIntent, "Share QR Details"))
+                                shareKitchenQrStandee(
+                                    context = context,
+                                    kitchenName = kitchen?.name ?: "A1 Huma Caterers",
+                                    kitchenCode = storeCode,
+                                    storeUrl = storeUrl,
+                                    fssai = kitchen?.fssaiLicense ?: "10021011000452",
+                                    phone = kitchen?.ownerMobile ?: "9876543210"
+                                )
                             },
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier.weight(1f)
@@ -668,12 +679,14 @@ fun KitchenDigitalStoreShareScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        val sendIntent = Intent().apply {
-                            action = Intent.ACTION_SEND
-                            putExtra(Intent.EXTRA_TEXT, "A1 Huma Caterers Digital Standee & Menu Link:\n$storeUrl\nCall: ${kitchen?.ownerMobile}")
-                            type = "text/plain"
-                        }
-                        context.startActivity(Intent.createChooser(sendIntent, "Share Standee"))
+                        shareKitchenQrStandee(
+                            context = context,
+                            kitchenName = kitchen?.name ?: "A1 Huma Caterers",
+                            kitchenCode = storeCode,
+                            storeUrl = storeUrl,
+                            fssai = kitchen?.fssaiLicense ?: "10021011000452",
+                            phone = kitchen?.ownerMobile ?: "9876543210"
+                        )
                         showQrStandeeDialog = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = SaffronPrimary)
@@ -691,107 +704,170 @@ fun KitchenDigitalStoreShareScreen(
 }
 
 /**
- * Authentic Scannable QR Code Canvas with Corner Position Markers and Data Matrix
+ * 100% Genuine ISO/IEC 18004 Scannable QR Code Canvas powered by ZXing QRCodeWriter.
+ * Encodes the full kitchen deep link URL with High (30%) Reed-Solomon error correction
+ * and crisp high-contrast modules so any phone camera or in-app scanner decodes it instantly.
  */
 @Composable
 fun DigitalQrCodeCanvas(
     kitchenCode: String,
     modifier: Modifier = Modifier
 ) {
+    val qrPayload = remember(kitchenCode) {
+        if (kitchenCode.startsWith("http") || kitchenCode.startsWith("upi://")) {
+            kitchenCode
+        } else {
+            "https://catererswale.com/store/$kitchenCode?kitchen=$kitchenCode"
+        }
+    }
+
+    val bitMatrix = remember(qrPayload) {
+        try {
+            val hints = mapOf(
+                EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.H,
+                EncodeHintType.MARGIN to 2,
+                EncodeHintType.CHARACTER_SET to "UTF-8"
+            )
+            QRCodeWriter().encode(qrPayload, BarcodeFormat.QR_CODE, 0, 0, hints)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     Canvas(modifier = modifier) {
         val sizePx = size.minDimension
-        val gridSize = 21 // 21x21 standard QR grid
-        val moduleSize = sizePx / gridSize
-
-        // Draw white background
+        // Pure white quiet zone & background for maximum contrast
         drawRect(color = Color.White, size = Size(sizePx, sizePx))
 
-        fun drawFinderPattern(rowStart: Int, colStart: Int) {
-            // Outer black 7x7
-            drawRoundRect(
-                color = Color(0xFF1E293B),
-                topLeft = Offset(colStart * moduleSize, rowStart * moduleSize),
-                size = Size(7 * moduleSize, 7 * moduleSize),
-                cornerRadius = CornerRadius(2 * moduleSize, 2 * moduleSize)
-            )
-            // Inner white 5x5
-            drawRect(
-                color = Color.White,
-                topLeft = Offset((colStart + 1) * moduleSize, (rowStart + 1) * moduleSize),
-                size = Size(5 * moduleSize, 5 * moduleSize)
-            )
-            // Center black 3x3
-            drawRoundRect(
-                color = Color(0xFF1E293B),
-                topLeft = Offset((colStart + 2) * moduleSize, (rowStart + 2) * moduleSize),
-                size = Size(3 * moduleSize, 3 * moduleSize),
-                cornerRadius = CornerRadius(moduleSize, moduleSize)
-            )
+        val matrix = bitMatrix ?: return@Canvas
+        val matrixWidth = matrix.width
+        val matrixHeight = matrix.height
+        if (matrixWidth <= 0 || matrixHeight <= 0) return@Canvas
+
+        val moduleWidth = sizePx / matrixWidth.toFloat()
+        val moduleHeight = sizePx / matrixHeight.toFloat()
+
+        // Draw crisp black QR modules with slight overlap (1.03f) to prevent sub-pixel anti-aliasing gaps
+        for (y in 0 until matrixHeight) {
+            for (x in 0 until matrixWidth) {
+                if (matrix.get(x, y)) {
+                    drawRect(
+                        color = Color.Black,
+                        topLeft = Offset(x * moduleWidth, y * moduleHeight),
+                        size = Size(moduleWidth * 1.03f, moduleHeight * 1.03f)
+                    )
+                }
+            }
         }
+    }
+}
 
-        // Top-Left Finder
-        drawFinderPattern(0, 0)
-        // Top-Right Finder
-        drawFinderPattern(0, 14)
-        // Bottom-Left Finder
-        drawFinderPattern(14, 0)
+/**
+ * Generates a high-resolution PNG Kitchen QR Standee Poster with a real ZXing QR Code
+ * and shares both the PNG image and the store URL via WhatsApp / Android Share Sheet.
+ */
+private fun shareKitchenQrStandee(
+    context: Context,
+    kitchenName: String,
+    kitchenCode: String,
+    storeUrl: String,
+    fssai: String,
+    phone: String
+) {
+    try {
+        val qrPayload = "https://catererswale.com/store/$kitchenCode?kitchen=$kitchenCode"
+        val qrSize = 600
+        val hints = mapOf(
+            EncodeHintType.ERROR_CORRECTION to ErrorCorrectionLevel.H,
+            EncodeHintType.MARGIN to 2,
+            EncodeHintType.CHARACTER_SET to "UTF-8"
+        )
+        val bitMatrix = QRCodeWriter().encode(qrPayload, BarcodeFormat.QR_CODE, qrSize, qrSize, hints)
 
-        // Timing patterns
-        for (i in 8..12 step 2) {
-            drawRect(
-                color = Color(0xFF1E293B),
-                topLeft = Offset(i * moduleSize, 6 * moduleSize),
-                size = Size(moduleSize, moduleSize)
-            )
-            drawRect(
-                color = Color(0xFF1E293B),
-                topLeft = Offset(6 * moduleSize, i * moduleSize),
-                size = Size(moduleSize, moduleSize)
-            )
+        val posterWidth = 800
+        val posterHeight = 1040
+        val bitmap = android.graphics.Bitmap.createBitmap(posterWidth, posterHeight, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+
+        // Poster Background
+        val bgPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.WHITE
+            style = android.graphics.Paint.Style.FILL
         }
+        canvas.drawRect(0f, 0f, posterWidth.toFloat(), posterHeight.toFloat(), bgPaint)
 
-        // Pseudo-deterministic data modules based on kitchenCode hash
-        val hash = kitchenCode.hashCode().toLong() and 0xFFFFFFFFL
-        for (r in 0 until gridSize) {
-            for (c in 0 until gridSize) {
-                val inTopLeft = r < 8 && c < 8
-                val inTopRight = r < 8 && c >= 13
-                val inBottomLeft = r >= 13 && c < 8
-                val inCenterLogo = r in 9..11 && c in 9..11
-                val inTiming = (r == 6 && c in 8..12) || (c == 6 && r in 8..12)
+        // Saffron Border
+        val borderPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.parseColor("#EA580C")
+            style = android.graphics.Paint.Style.STROKE
+            strokeWidth = 16f
+        }
+        canvas.drawRoundRect(20f, 20f, posterWidth - 20f, posterHeight - 20f, 32f, 32f, borderPaint)
 
-                if (!inTopLeft && !inTopRight && !inBottomLeft && !inCenterLogo && !inTiming) {
-                    val bit = ((hash * (r + 1) * 31 + (c + 1) * 17 + (r xor c)) % 10) > 4
-                    if (bit) {
-                        drawRoundRect(
-                            color = Color(0xFF1E293B),
-                            topLeft = Offset(c * moduleSize + moduleSize * 0.08f, r * moduleSize + moduleSize * 0.08f),
-                            size = Size(moduleSize * 0.84f, moduleSize * 0.84f),
-                            cornerRadius = CornerRadius(moduleSize * 0.2f, moduleSize * 0.2f)
-                        )
-                    }
+        // Title Text
+        val titlePaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.parseColor("#0F172A")
+            textSize = 44f
+            typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+            textAlign = android.graphics.Paint.Align.CENTER
+        }
+        canvas.drawText(kitchenName, posterWidth / 2f, 110f, titlePaint)
+
+        val subPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.parseColor("#EA580C")
+            textSize = 28f
+            typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+            textAlign = android.graphics.Paint.Align.CENTER
+        }
+        canvas.drawText("SCAN QR TO OPEN ONLINE DAWAT MENU", posterWidth / 2f, 160f, subPaint)
+
+        // Draw crisp QR Matrix
+        val qrLeft = (posterWidth - qrSize) / 2
+        val qrTop = 190
+        val blackPaint = android.graphics.Paint().apply {
+            color = android.graphics.Color.BLACK
+            style = android.graphics.Paint.Style.FILL
+        }
+        for (y in 0 until qrSize) {
+            for (x in 0 until qrSize) {
+                if (bitMatrix.get(x, y)) {
+                    canvas.drawPoint((qrLeft + x).toFloat(), (qrTop + y).toFloat(), blackPaint)
                 }
             }
         }
 
-        // Center Emblem/Logo Box
-        val centerStart = 9 * moduleSize
-        val centerSpan = 3 * moduleSize
-        drawRoundRect(
-            color = SaffronPrimary,
-            topLeft = Offset(centerStart, centerStart),
-            size = Size(centerSpan, centerSpan),
-            cornerRadius = CornerRadius(moduleSize * 0.5f, moduleSize * 0.5f)
-        )
-        drawCircle(
-            color = Color.White,
-            radius = moduleSize * 0.8f,
-            center = Offset(sizePx / 2f, sizePx / 2f)
-        )
-        drawCircle(
-            color = AmberSecondary,
-            radius = moduleSize * 0.45f,
-            center = Offset(sizePx / 2f, sizePx / 2f)
-        )
+        // Footer Details
+        val infoPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.parseColor("#334155")
+            textSize = 24f
+            textAlign = android.graphics.Paint.Align.CENTER
+        }
+        canvas.drawText("Store Link: $storeUrl", posterWidth / 2f, 845f, infoPaint)
+        canvas.drawText("Kitchen Code: $kitchenCode  |  FSSAI: $fssai", posterWidth / 2f, 890f, infoPaint)
+        canvas.drawText("Order Helpline: $phone", posterWidth / 2f, 935f, subPaint)
+
+        val cacheDir = File(context.cacheDir, "qr_standees").apply { mkdirs() }
+        val file = File(cacheDir, "standee_${kitchenCode}.png")
+        FileOutputStream(file).use { out ->
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
+        }
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+
+        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "image/png"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(
+                Intent.EXTRA_TEXT,
+                "🍲 *$kitchenName* Digital Wall / Table QR Standee\n\n📷 Is QR code ko CaterersWale App ya Camera se scan karein, ya direct link kholein:\n👉 $storeUrl\n\n🔑 Store Code: $kitchenCode\n📞 Helpline: $phone"
+            )
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(sendIntent, "Share Kitchen QR Standee"))
+    } catch (_: Exception) {
+        val fallbackIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, "Scan QR or visit our digital store: $storeUrl\nKitchen: $kitchenName\nStore Code: $kitchenCode")
+        }
+        context.startActivity(Intent.createChooser(fallbackIntent, "Share Kitchen QR Standee"))
     }
 }

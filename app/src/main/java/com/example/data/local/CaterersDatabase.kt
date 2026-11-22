@@ -28,7 +28,7 @@ import com.example.data.models.PartnerReviewEntity
         FavoriteKitchenEntity::class,
         KitchenUtensilEntity::class
     ],
-    version = 15,
+    version = 17,
     exportSchema = false
 )
 abstract class CaterersDatabase : RoomDatabase() {

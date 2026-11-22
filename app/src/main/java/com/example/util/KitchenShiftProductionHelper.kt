@@ -3,6 +3,7 @@ package com.example.util
 import android.content.Context
 import android.print.PrintAttributes
 import android.print.PrintManager
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.example.data.models.DishPackBreakdown
@@ -357,6 +358,7 @@ object KitchenShiftProductionHelper {
      */
     fun printShiftSummary(context: Context, htmlContent: String, jobName: String) {
         val webView = WebView(context)
+        webView.settings.cacheMode = WebSettings.LOAD_NO_CACHE
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView, url: String) {
                 val printManager = context.getSystemService(Context.PRINT_SERVICE) as? PrintManager
